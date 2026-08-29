@@ -293,7 +293,7 @@ BarWidget {
         height: implicitHeight
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        text: ""
+        text: ""
         // Either button opens the manage popup — unlike the system tray
         // (whose chevron has no popup of its own to open on left-click),
         // this widget's only purpose when nothing is hosted yet is to be a
