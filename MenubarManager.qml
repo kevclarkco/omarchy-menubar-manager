@@ -260,6 +260,29 @@ BarWidget {
 
     onItemChanged: root.setHostedPanelOpen(widgetId, item && item.opened === true)
     Component.onDestruction: root.setHostedPanelOpen(widgetId, false)
+
+    // Hosted widgets aren't real ModuleSlots, so they never get Bar.qml's
+    // own "this widget's panel is open" underline — reproduce it here,
+    // matching its look (Color.accent, same 55%-of-width sizing) and
+    // per-icon, driven by the same openHostedPanels tracking already used
+    // to keep the drawer open while a hosted panel is up.
+    Rectangle {
+      id: openIndicator
+      readonly property int inset: Style.space(2)
+      visible: opacity > 0
+      opacity: root.openHostedPanels[hostedLoader.widgetId] === true ? 0.9 : 0
+      color: Color.accent
+      radius: Math.min(width, height) / 2
+      width: Math.max(Style.space(10), Math.round(parent.width * 0.55))
+      height: Style.space(2)
+      anchors.horizontalCenter: parent.horizontalCenter
+      y: (root.bar && root.bar.position === "top") ? parent.height - height - inset : inset
+      z: 50
+
+      Behavior on opacity {
+        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+      }
+    }
   }
 
   // Always visible (unlike the tray, which hides itself when empty) — this
