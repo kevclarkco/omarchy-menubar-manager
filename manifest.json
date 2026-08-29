@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "kc.menubar-manager",
+  "name": "Menubar Manager",
+  "version": "0.1.0",
+  "author": "kc",
+  "license": "MIT",
+  "description": "Collapse bar widgets into a hover-to-reveal drawer, with a manage popup to move widgets in and out.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "MenubarManager.qml"
+  },
+  "barWidget": {
+    "displayName": "Menubar Manager",
+    "description": "Hides other bar widgets behind a hover-reveal drawer.",
+    "category": "Layout",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
