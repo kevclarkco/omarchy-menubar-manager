@@ -26,6 +26,17 @@ BarWidget {
   property bool expanded: false
   property bool managePopupOpen: false
 
+  // Bar.qml's ModuleSlot draws an underline under whichever widget's popout
+  // is active (bar.activePopout, which opening the manage popup sets to
+  // this widget), sized by default to 55% of the *whole slot's* width. That
+  // slot can be anywhere from 27px (collapsed) to well over 100px (drawer
+  // open, several hosted icons showing) — nothing to do with how wide the
+  // glyph that actually opens the popup is, so the mark ballooned across
+  // several drawer icons instead of marking just the glyph. Declaring this
+  // is the sanctioned override (see panelIndicatorExtent in Bar.qml): any
+  // widget can report the width it actually wants the mark drawn at.
+  readonly property real openPanelIndicatorWidth: expandIcon.width
+
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
@@ -291,7 +302,11 @@ BarWidget {
         bar: root.bar
         width: implicitWidth
         height: implicitHeight
-        anchors.left: parent.left
+        // Anchored to the right (not left) so drawerClip below grows
+        // leftward, away from the glyph, instead of pushing it — see the
+        // comment on drawerClip for why that keeps the glyph stationary
+        // under the cursor as the drawer opens.
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         text: ""
         // Either button opens the manage popup — unlike the system tray
@@ -305,7 +320,12 @@ BarWidget {
 
       Item {
         id: drawerClip
-        anchors.left: expandIcon.right
+        // Right edge pinned to the glyph, growing leftward as width
+        // increases (not anchors.left, which would grow rightward and push
+        // the glyph — and everything after it in the bar's right-anchored
+        // row — further left to compensate, sliding the glyph out from
+        // under whatever's hovering it).
+        anchors.right: expandIcon.left
         anchors.verticalCenter: parent.verticalCenter
         width: root.drawerShown ? drawerContent.implicitWidth : 0
         height: root.barSize
@@ -317,6 +337,11 @@ BarWidget {
 
         Row {
           id: drawerContent
+          // Pinned to this clip's right edge (nearest the glyph) rather
+          // than the default left-aligned x:0, so revealed icons unfurl
+          // outward from next to the glyph as the clip widens, instead of
+          // from its far (left) edge inward.
+          anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
           spacing: root.itemGap
 
