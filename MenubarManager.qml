@@ -388,10 +388,24 @@ BarWidget {
     }
   }
 
+  // A separate coordinator object for the manage popup's owner, instead of
+  // root itself. Bar.qml's ModuleSlot lights up its "panel open" underline
+  // when bar.activePopout === slot.activeItem — and slot.activeItem is this
+  // widget's own root. Using root as PopupCard's owner also makes it the
+  // requestPopout coordinatorKey, so opening the manage popup made that
+  // comparison match and drew the mark. A distinct object still gets
+  // PopupCard's outside-click auto-close (which calls owner.close()) and
+  // still participates correctly in cross-widget popout exclusivity, but
+  // no longer equals slot.activeItem, so the mark never lights up for it.
+  QtObject {
+    id: managePopupCoordinator
+    function close() { root.close() }
+  }
+
   PopupCard {
     id: managePopup
     anchorItem: root
-    owner: root
+    owner: managePopupCoordinator
     bar: root.bar
     open: root.managePopupOpen
     contentWidth: managePopup.fittedContentWidth(Style.space(320))
@@ -437,7 +451,7 @@ BarWidget {
           Text {
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left
-            anchors.right: unhostBtn.left
+            anchors.right: pinBtn.left
             anchors.rightMargin: Style.space(8)
             text: hostedRow.displayName
             color: root.foreground
@@ -447,22 +461,22 @@ BarWidget {
           }
 
           Button {
-            id: unhostBtn
+            id: pinBtn
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: hideBtn.left
             anchors.rightMargin: Style.space(6)
-            text: "Remove"
+            text: hostedRow.isPinned ? "Unpin" : "Pin"
             foreground: root.foreground
             horizontalPadding: 8
             verticalPadding: 3
             fontSize: Style.font.bodySmall
-            onClicked: root.unhostWidgetById(hostedRow.itemId)
+            onClicked: root.togglePin(hostedRow.itemId)
           }
 
           Button {
             id: hideBtn
             anchors.verticalCenter: parent.verticalCenter
-            anchors.right: pinBtn.left
+            anchors.right: unhostBtn.left
             anchors.rightMargin: Style.space(6)
             text: hostedRow.isHidden ? "Show" : "Hide"
             foreground: root.foreground
@@ -473,15 +487,15 @@ BarWidget {
           }
 
           Button {
-            id: pinBtn
+            id: unhostBtn
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
-            text: hostedRow.isPinned ? "Unpin" : "Pin"
+            text: "Remove"
             foreground: root.foreground
             horizontalPadding: 8
             verticalPadding: 3
             fontSize: Style.font.bodySmall
-            onClicked: root.togglePin(hostedRow.itemId)
+            onClicked: root.unhostWidgetById(hostedRow.itemId)
           }
         }
       }
@@ -524,7 +538,7 @@ BarWidget {
             id: addBtn
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
-            text: "Host"
+            text: "Add"
             foreground: root.foreground
             horizontalPadding: 8
             verticalPadding: 3
