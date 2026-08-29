@@ -94,6 +94,13 @@ function hostWidget(config, ownId, widgetId) {
   if (!own) return false
   if (!Array.isArray(own.hosted)) own.hosted = []
   if (own.hosted.indexOf(id) === -1) own.hosted.push(id)
+  // This is a structural bar.layout change, which forces Bar.qml to destroy
+  // and recreate every module slot (see MenubarManager.qml's hostWidgetById
+  // comment) — including this widget's own manage popup, mid-click. Flagging
+  // a reopen here, in the same atomic write, lets the freshly (re)constructed
+  // instance restore it, so the user can act on one widget after another
+  // without the popup vanishing on every single click.
+  own.popupOpen = true
   return true
 }
 
@@ -121,6 +128,9 @@ function unhostWidget(config, ownId, widgetId, fallbackSection) {
     own.hosted = (own.hosted || []).filter(function(x) { return x !== id })
     own.pinned = (own.pinned || []).filter(function(x) { return x !== id })
     own.hidden = (own.hidden || []).filter(function(x) { return x !== id })
+    // See the matching comment in hostWidget: also a structural change,
+    // also needs the popup restored on the other side of the rebuild.
+    own.popupOpen = true
   }
   return true
 }

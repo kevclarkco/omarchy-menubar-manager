@@ -35,6 +35,26 @@ BarWidget {
   readonly property var drawerIds: MenubarModel.bucket("drawer", hostedIds, pinnedIds, hiddenIds)
   readonly property var pinnedBucketIds: MenubarModel.bucket("pinned", hostedIds, pinnedIds, hiddenIds)
 
+  // Host/un-host destroy and recreate this widget mid-click (see
+  // hostWidgetById below), taking any open manage popup down with it.
+  // MenubarModel flags own.popupOpen in that same atomic write so the fresh
+  // instance can restore it here; persist() writes it back out without
+  // popupOpen, a settings-only change Bar.qml can patch in place rather than
+  // rebuilding again — so the reopened popup then stays open for the next
+  // click instead of vanishing every time.
+  onSettingsChanged: {
+    if (settings.popupOpen === true) {
+      root.managePopupOpen = true
+      // Deferred, not immediate: this fires while the structural rebuild
+      // that just recreated this very instance is still settling (same
+      // reason Bar.qml's own ModuleSlot defers injectProps via
+      // Qt.callLater). Clearing synchronously here landed a second config
+      // write on top of one still resolving, which is what triggered a
+      // "binding loop detected for barConfig" warning during testing.
+      Qt.callLater(function() { root.persist(root.hostedIds, root.pinnedIds, root.hiddenIds) })
+    }
+  }
+
   readonly property int itemGap: Style.space(4)
   readonly property int animationDuration: 600
 
@@ -136,13 +156,99 @@ BarWidget {
     if ("settings" in item) item.settings = Qt.binding(function() { return root.pluginEntrySettings(id) })
   }
 
+  // {widgetId: true} for every hosted widget whose own panel is currently
+  // open. Most first-party/plugin widgets expose `opened` via qs.Ui.Panel's
+  // PanelController — a purely local bool, NOT wired through
+  // bar.activePopout/requestPopout the way PopupCard is, so that mechanism
+  // can't be reused here; each hosted instance's own openedChanged has to be
+  // watched directly. Kept as an id-keyed map (not a count) so a slot being
+  // destroyed mid-open — host/un-host's own destructive rebuild — can't
+  // leave a stale "something's open" entry with nothing left to clear it.
+  property var openHostedPanels: ({})
+  readonly property bool anyHostedPanelOpen: Object.keys(openHostedPanels).length > 0
+
+  // A hosted widget's panel window, once open, physically covers this same
+  // screen region — so the moment it opens, hover on the drawer genuinely
+  // (not spuriously) reads false, and the moment it closes, hover genuinely
+  // reads true again (the cursor really is sitting wherever the close-click
+  // landed, right over the now-uncovered drawer). Both readings are
+  // accurate; neither reflects the user's actual intent to leave. Debouncing
+  // raw hover can't fix that — it's not noise to filter, it's a real signal
+  // with the wrong meaning at that instant. So anyHostedPanelOpen going
+  // false must never by itself trigger a visible collapse: combine it with
+  // (already hover-debounced) `expanded` and only let the combined signal
+  // collapse the drawer after it's stayed unwanted for a sustained beat,
+  // while still expanding it immediately the moment either turns true.
+  readonly property bool wantDrawerOpen: expanded || anyHostedPanelOpen
+  property bool drawerShown: false
+
+  onWantDrawerOpenChanged: {
+    if (wantDrawerOpen) {
+      drawerCloseTimer.stop()
+      root.drawerShown = true
+    } else {
+      drawerCloseTimer.restart()
+    }
+  }
+
+  Timer {
+    id: drawerCloseTimer
+    interval: 450
+    onTriggered: root.drawerShown = false
+  }
+
+  function setHostedPanelOpen(id, isOpen) {
+    if (!!openHostedPanels[id] === !!isOpen) return
+    var next = {}
+    for (var k in openHostedPanels) next[k] = openHostedPanels[k]
+    if (isOpen) next[id] = true
+    else delete next[id]
+    openHostedPanels = next
+  }
+
   component HostedWidgetSlot: Loader {
     id: hostedLoader
     required property var modelData
+    // True for the collapsible drawer bucket, false for the always-visible
+    // pinned row — only drawer items get torn down while collapsed, below.
+    property bool gatedByDrawer: false
     readonly property string widgetId: String(modelData)
-    active: !!(root.bar && root.bar.barWidgetRegistry && root.bar.barWidgetRegistry.has(widgetId))
+    // clip:true on drawerClip only hides this widget's *paint* — the loaded
+    // item, and every WidgetButton-style control nested inside it, keeps its
+    // normal size and stays registered in bar.clickTargets (a bar-wide list,
+    // unscoped to any one widget's own slot). Bar.qml's click routing does a
+    // geometric hit-test against that whole list, so a click on a completely
+    // unrelated bar widget could land on a hidden-but-still-registered
+    // hosted widget instead — confirmed live: clicking Network opened
+    // LocalSend's panel while the drawer was collapsed. Setting opacity/
+    // visible on the top-level loaded item doesn't fix this: the actual
+    // registered target is typically a control nested inside it (its own
+    // local `opacity`/`visible` stay whatever they were regardless of an
+    // ancestor's), so the eligibility checks in moduleTargetClickable()
+    // never see the change. The only reliable fix is to stop the widget (and
+    // everything nested in it) existing at all while collapsed: gating
+    // `active` on drawerShown fully destroys it, which correctly runs each
+    // control's own Component.onDestruction → unregisterClickTarget cleanup.
+    // It reloads fresh the next time the drawer is hovered open, before
+    // anything inside it is reachable to click.
+    active: (!gatedByDrawer || root.drawerShown)
+      && !!(root.bar && root.bar.barWidgetRegistry && root.bar.barWidgetRegistry.has(widgetId))
     sourceComponent: active ? root.bar.barWidgetRegistry.widgets[widgetId].component : null
     onLoaded: root.injectHostedProps(item, widgetId)
+
+    // "opened" isn't declared on every widget (e.g. a plain BarWidget with
+    // no popup, like a clock) — ignoreUnknownSignals lets those load here
+    // without a warning; they just never report open.
+    Connections {
+      target: hostedLoader.item
+      ignoreUnknownSignals: true
+      function onOpenedChanged() {
+        root.setHostedPanelOpen(hostedLoader.widgetId, hostedLoader.item.opened === true)
+      }
+    }
+
+    onItemChanged: root.setHostedPanelOpen(widgetId, item && item.opened === true)
+    Component.onDestruction: root.setHostedPanelOpen(widgetId, false)
   }
 
   // Always visible (unlike the tray, which hides itself when empty) — this
@@ -163,8 +269,21 @@ BarWidget {
       width: expandIcon.implicitWidth + drawerClip.width
       height: root.barSize
 
+      // Filters short, unrelated hover blips (e.g. an unrelated widget's own
+      // panel opening/closing elsewhere on the bar momentarily disturbing
+      // what Hyprland reports here) before they ever reach root.expanded.
+      // The false-then-true dance a hosted panel's own open/close produces
+      // is a longer, *genuine* hover change, not blip noise — that case is
+      // handled separately below via wantDrawerOpen/drawerCloseTimer.
       HoverHandler {
-        onHoveredChanged: root.expanded = hovered
+        id: drawerHover
+        onHoveredChanged: hoverSettleTimer.restart()
+      }
+
+      Timer {
+        id: hoverSettleTimer
+        interval: 150
+        onTriggered: root.expanded = drawerHover.hovered
       }
 
       BarIconButton {
@@ -188,7 +307,7 @@ BarWidget {
         id: drawerClip
         anchors.left: expandIcon.right
         anchors.verticalCenter: parent.verticalCenter
-        width: root.expanded ? drawerContent.implicitWidth : 0
+        width: root.drawerShown ? drawerContent.implicitWidth : 0
         height: root.barSize
         clip: true
 
@@ -203,7 +322,7 @@ BarWidget {
 
           Repeater {
             model: root.drawerIds
-            HostedWidgetSlot {}
+            HostedWidgetSlot { gatedByDrawer: true }
           }
         }
       }
