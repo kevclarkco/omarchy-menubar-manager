@@ -176,15 +176,76 @@ BarWidget {
     if ("settings" in item) item.settings = Qt.binding(function() { return root.pluginEntrySettings(id) })
   }
 
+  // widgetId -> [coordinatorKey, ...], populated once per hosted instance
+  // (see registerHostedPanels) by walking its component tree for real popup
+  // windows. Every floating panel in this shell is a Common.PopupCard or
+  // qs.Ui.KeyboardPanel instance (duck-typed below by their shared
+  // anchorItem/open/close contract — there's no other sanctioned way to
+  // render one), and every one of those already calls
+  // bar.requestPopout(owner || itself) the moment it opens, purely to make
+  // cross-widget "only one popup open at a time" exclusivity work. That
+  // means bar.activePopout is a reliable, already-existing signal for "some
+  // panel is open" that every widget participates in — first or third party,
+  // cooperative or not — unlike a widget's own `opened` property (a
+  // convenience alias some widgets add on top, which others like OmaVault
+  // simply don't, silently breaking detection). Keying off activePopout
+  // instead means a hosted widget's panel is tracked correctly with zero
+  // cooperation required from the widget itself.
+  property var hostedCoordinatorKeys: ({})
+
+  // Depth-first scan of `obj`'s declared children (QML's default `data`
+  // property holds every child, visual or not, so this alone reaches
+  // anything nested arbitrarily deep — nested Items, and any Window-derived
+  // popup declared among them). Any object exposing the PopupCard/
+  // KeyboardPanel contract gets recorded under its own `owner` (if it
+  // declared one — see the coordinatorKey comment on both of those) or
+  // itself otherwise, matching exactly what each one passes to
+  // bar.requestPopout.
+  function findPanelCoordinatorKeys(obj, out, depth) {
+    if (!obj || depth > 8) return
+    if ("anchorItem" in obj && "open" in obj && typeof obj.close === "function") {
+      out.push(obj.owner ? obj.owner : obj)
+    }
+    var data = obj.data
+    if (data && typeof data.length === "number") {
+      for (var i = 0; i < data.length; i++) findPanelCoordinatorKeys(data[i], out, depth + 1)
+    }
+  }
+
+  function registerHostedPanels(id, item) {
+    var keys = []
+    findPanelCoordinatorKeys(item, keys, 0)
+    var next = {}
+    for (var k in root.hostedCoordinatorKeys) next[k] = root.hostedCoordinatorKeys[k]
+    next[id] = keys
+    root.hostedCoordinatorKeys = next
+  }
+
+  function unregisterHostedPanels(id) {
+    if (!(id in root.hostedCoordinatorKeys)) return
+    var next = {}
+    for (var k in root.hostedCoordinatorKeys) if (k !== id) next[k] = root.hostedCoordinatorKeys[k]
+    root.hostedCoordinatorKeys = next
+  }
+
   // {widgetId: true} for every hosted widget whose own panel is currently
-  // open. Most first-party/plugin widgets expose `opened` via qs.Ui.Panel's
-  // PanelController — a purely local bool, NOT wired through
-  // bar.activePopout/requestPopout the way PopupCard is, so that mechanism
-  // can't be reused here; each hosted instance's own openedChanged has to be
-  // watched directly. Kept as an id-keyed map (not a count) so a slot being
-  // destroyed mid-open — host/un-host's own destructive rebuild — can't
-  // leave a stale "something's open" entry with nothing left to clear it.
-  property var openHostedPanels: ({})
+  // open, derived live from bar.activePopout against each widget's
+  // registered coordinator keys — single-popout model, so at most one entry
+  // is ever true at once, but this stays id-keyed (not a single bool) since
+  // openIndicator below needs to know *which* icon to mark.
+  readonly property var openHostedPanels: {
+    var out = {}
+    var active = root.bar ? root.bar.activePopout : null
+    if (active) {
+      for (var id in root.hostedCoordinatorKeys) {
+        var keys = root.hostedCoordinatorKeys[id]
+        for (var i = 0; i < keys.length; i++) {
+          if (keys[i] === active) { out[id] = true; break }
+        }
+      }
+    }
+    return out
+  }
   readonly property bool anyHostedPanelOpen: Object.keys(openHostedPanels).length > 0
 
   // A hosted widget's panel window, once open, physically covers this same
@@ -217,15 +278,6 @@ BarWidget {
     onTriggered: root.drawerShown = false
   }
 
-  function setHostedPanelOpen(id, isOpen) {
-    if (!!openHostedPanels[id] === !!isOpen) return
-    var next = {}
-    for (var k in openHostedPanels) next[k] = openHostedPanels[k]
-    if (isOpen) next[id] = true
-    else delete next[id]
-    openHostedPanels = next
-  }
-
   component HostedWidgetSlot: Loader {
     id: hostedLoader
     required property var modelData
@@ -254,21 +306,11 @@ BarWidget {
     active: (!gatedByDrawer || root.drawerShown)
       && !!(root.bar && root.bar.barWidgetRegistry && root.bar.barWidgetRegistry.has(widgetId))
     sourceComponent: active ? root.bar.barWidgetRegistry.widgets[widgetId].component : null
-    onLoaded: root.injectHostedProps(item, widgetId)
-
-    // "opened" isn't declared on every widget (e.g. a plain BarWidget with
-    // no popup, like a clock) — ignoreUnknownSignals lets those load here
-    // without a warning; they just never report open.
-    Connections {
-      target: hostedLoader.item
-      ignoreUnknownSignals: true
-      function onOpenedChanged() {
-        root.setHostedPanelOpen(hostedLoader.widgetId, hostedLoader.item.opened === true)
-      }
+    onLoaded: {
+      root.injectHostedProps(item, widgetId)
+      root.registerHostedPanels(widgetId, item)
     }
-
-    onItemChanged: root.setHostedPanelOpen(widgetId, item && item.opened === true)
-    Component.onDestruction: root.setHostedPanelOpen(widgetId, false)
+    Component.onDestruction: root.unregisterHostedPanels(widgetId)
 
     // Hosted widgets aren't real ModuleSlots, so they never get Bar.qml's
     // own "this widget's panel is open" underline — reproduce it here,
