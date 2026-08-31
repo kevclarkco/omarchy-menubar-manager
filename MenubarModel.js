@@ -4,6 +4,16 @@
 // bar.barWidgetRegistry, ...) happens in MenubarManager.qml, which calls into
 // these functions with plain data.
 
+// omarchy.tray is excluded from hosting: two places in the shell
+// (PluginRegistry.barTarget's right-section anchor, BarModel.pinTrayToInner)
+// assume its entry always sits in bar.layout.right and key off that literal
+// id. Hosting it would relocate that entry into config.plugins[], silently
+// changing default-insertion placement for every other right-section widget
+// added afterward — plus our own drawer's gatedByDrawer teardown would
+// destroy/recreate Tray's live SystemTray subscriptions and open submenu
+// state on every hover-out. Not worth it.
+var EXCLUDED_WIDGET_IDS = ["omarchy.tray"]
+
 function entryId(entry) {
   if (typeof entry === "string") return entry
   if (entry && typeof entry === "object" && entry.id !== undefined && entry.id !== null)
@@ -70,6 +80,7 @@ function findOwnEntry(config, ownId) {
 function hostWidget(config, ownId, widgetId) {
   var id = String(widgetId || "")
   if (!id || id === ownId) return false
+  if (EXCLUDED_WIDGET_IDS.indexOf(id) !== -1) return false
   ensureShape(config)
 
   var entry = null
@@ -94,6 +105,15 @@ function hostWidget(config, ownId, widgetId) {
   if (!own) return false
   if (!Array.isArray(own.hosted)) own.hosted = []
   if (own.hosted.indexOf(id) === -1) own.hosted.push(id)
+  // Remember where this widget actually lived, if it lived anywhere, so
+  // unhostWidget can put it back there instead of guessing from the
+  // widget's manifest defaultSection — most manifests (e.g. the built-in
+  // Workspaces widget) don't declare one at all, which silently sent every
+  // such widget to "right" on un-host regardless of its real origin.
+  if (layoutLoc) {
+    if (!isPlainObject(own.hostedFrom)) own.hostedFrom = {}
+    own.hostedFrom[id] = layoutLoc.section
+  }
   // This is a structural bar.layout change, which forces Bar.qml to destroy
   // and recreate every module slot (see MenubarManager.qml's hostWidgetById
   // comment) — including this widget's own manage popup, mid-click. Flagging
@@ -120,14 +140,22 @@ function unhostWidget(config, ownId, widgetId, fallbackSection) {
   }
   if (!entry) entry = { id: id }
 
-  var section = ["left", "center", "right"].indexOf(fallbackSection) !== -1 ? fallbackSection : "right"
+  var own = findOwnEntry(config, ownId)
+  // The section this widget actually came from (recorded by hostWidget)
+  // beats the manifest-guessed fallbackSection — most manifests don't
+  // declare a defaultSection at all, which isn't the same thing as this
+  // widget having genuinely belonged in "right".
+  var remembered = own && isPlainObject(own.hostedFrom) ? own.hostedFrom[id] : null
+  var section = ["left", "center", "right"].indexOf(remembered) !== -1
+    ? remembered
+    : (["left", "center", "right"].indexOf(fallbackSection) !== -1 ? fallbackSection : "right")
   config.bar.layout[section].push(entry)
 
-  var own = findOwnEntry(config, ownId)
   if (own) {
     own.hosted = (own.hosted || []).filter(function(x) { return x !== id })
     own.pinned = (own.pinned || []).filter(function(x) { return x !== id })
     own.hidden = (own.hidden || []).filter(function(x) { return x !== id })
+    if (isPlainObject(own.hostedFrom)) delete own.hostedFrom[id]
     // See the matching comment in hostWidget: also a structural change,
     // also needs the popup restored on the other side of the rebuild.
     own.popupOpen = true
@@ -184,13 +212,15 @@ function bucket(category, hostedIds, pinnedIds, hiddenIds) {
 }
 
 // "Add a widget to host" list for the manage popup: every registered bar
-// widget minus ourselves minus what's already hosted, sorted by display name.
+// widget minus ourselves minus what's already hosted minus EXCLUDED_WIDGET_IDS,
+// sorted by display name.
 function candidateWidgets(availableIds, metadataForFn, hostedIds, ownId) {
   var out = []
   for (var i = 0; i < availableIds.length; i++) {
     var id = availableIds[i]
     if (id === ownId) continue
     if (hostedIds.indexOf(id) !== -1) continue
+    if (EXCLUDED_WIDGET_IDS.indexOf(id) !== -1) continue
     var meta = metadataForFn(id) || {}
     out.push({ id: id, displayName: meta.displayName || id, category: meta.category || "" })
   }
@@ -228,6 +258,18 @@ function normalizeIds(list) {
   return out
 }
 
+// Same live-QML-property caution as normalizeIds, for the id->section map:
+// only copy over well-formed string values into a fresh plain object.
+function normalizeSectionMap(map) {
+  var out = {}
+  if (!map || typeof map !== "object") return out
+  for (var k in map) {
+    var v = map[k]
+    if (typeof v === "string" && ["left", "center", "right"].indexOf(v) !== -1) out[k] = v
+  }
+  return out
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     entryId: entryId,
@@ -243,6 +285,7 @@ if (typeof module !== "undefined") {
     bucket: bucket,
     candidateWidgets: candidateWidgets,
     defaultSectionForManifest: defaultSectionForManifest,
-    normalizeIds: normalizeIds
+    normalizeIds: normalizeIds,
+    normalizeSectionMap: normalizeSectionMap
   }
 }

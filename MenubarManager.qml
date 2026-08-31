@@ -43,6 +43,11 @@ BarWidget {
   readonly property var hostedIds: MenubarModel.normalizeIds(settings.hosted)
   readonly property var pinnedIds: MenubarModel.normalizeIds(settings.pinned)
   readonly property var hiddenIds: MenubarModel.normalizeIds(settings.hidden)
+  // Section each hosted widget actually came from, so unhostWidgetById can
+  // put it back there. Must be threaded through every persist() call (not
+  // just host/un-host) since updateEntryInline replaces the whole entry
+  // rather than merging it — see persist() below.
+  readonly property var hostedFrom: MenubarModel.normalizeSectionMap(settings.hostedFrom)
   readonly property var drawerIds: MenubarModel.bucket("drawer", hostedIds, pinnedIds, hiddenIds)
   readonly property var pinnedBucketIds: MenubarModel.bucket("pinned", hostedIds, pinnedIds, hiddenIds)
 
@@ -75,7 +80,11 @@ BarWidget {
       id: root.moduleName,
       hosted: nextHosted,
       pinned: nextPinned,
-      hidden: nextHidden
+      hidden: nextHidden,
+      // Not an argument: updateEntryInline replaces the whole entry, so any
+      // plain pin/hide toggle would otherwise silently erase hostedFrom
+      // (only host/un-host, via mutateShellConfig, ever mean to change it).
+      hostedFrom: root.hostedFrom
     })
   }
 
