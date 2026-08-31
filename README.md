@@ -16,9 +16,9 @@ registered bar widget, not just tray icons.
 
 ## Features
 
-- Hover the chevron to reveal hosted widgets; move away and it collapses
+- Hover the ⋯ icon to reveal hosted widgets; move away and it collapses
   again
-- A manage popup (click the chevron) to add, remove, pin, or hide widgets
+- A manage popup (click the ⋯ icon) to add, remove, pin, or hide widgets
 - **Add** moves a widget into the drawer
 - **Pin** keeps a hosted widget always visible, outside the drawer
 - **Hide** keeps a widget hosted (its background service, if it has one,
@@ -56,10 +56,10 @@ hosted, rather than in `bar.layout.*`.
 
 ## Use
 
-1. Click the chevron (either mouse button) to open the manage popup.
+1. Click the ⋯ icon (either mouse button) to open the manage popup.
 2. Under **Add a widget**, click **Add** next to anything you want to
    collapse into the drawer.
-3. Hover the chevron to reveal what's hosted; click a hosted widget's icon
+3. Hover the ⋯ icon to reveal what's hosted; click a hosted widget's icon
    to open its own panel, same as if it were still sitting directly on the
    bar.
 4. Back in the manage popup: **Pin** to keep something always visible
