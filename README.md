@@ -18,8 +18,8 @@ registered bar widget, not just tray icons.
 
 - Hover the chevron to reveal hosted widgets; move away and it collapses
   again
-- A manage popup (click the chevron) to host, un-host, pin, or hide widgets
-- **Host** moves a widget into the drawer
+- A manage popup (click the chevron) to add, remove, pin, or hide widgets
+- **Add** moves a widget into the drawer
 - **Pin** keeps a hosted widget always visible, outside the drawer
 - **Hide** keeps a widget hosted (its background service, if it has one,
   keeps running) without showing it anywhere
@@ -42,22 +42,22 @@ To update later:
 omarchy plugin update kc.omarchy-menubar-manager --yes
 ```
 
-## Remove
+## Uninstall
 
 ```bash
 omarchy plugin remove kc.omarchy-menubar-manager --yes
 ```
 
-Removing it does **not** un-host anything automatically first — any widgets
-still hosted at removal time will need to be added back to the bar by hand
-(`omarchy bar put <widget-id> --section <left|center|right>`), since their
-shell.json entries live in the top-level `plugins[]` array while hosted,
-rather than in `bar.layout.*`.
+Uninstalling does **not** remove hosted widgets from the drawer first — any
+widgets still hosted at uninstall time will need to be added back to the bar
+by hand (`omarchy bar put <widget-id> --section <left|center|right>`), since
+their shell.json entries live in the top-level `plugins[]` array while
+hosted, rather than in `bar.layout.*`.
 
 ## Use
 
 1. Click the chevron (either mouse button) to open the manage popup.
-2. Under **Add a widget**, click **Host** next to anything you want to
+2. Under **Add a widget**, click **Add** next to anything you want to
    collapse into the drawer.
 3. Hover the chevron to reveal what's hosted; click a hosted widget's icon
    to open its own panel, same as if it were still sitting directly on the
