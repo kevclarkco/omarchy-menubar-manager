@@ -21,7 +21,7 @@ import "MenubarModel.js" as MenubarModel
 // is an acceptable v1 tradeoff.
 BarWidget {
   id: root
-  moduleName: "kc.menubar-manager"
+  moduleName: "kc.omarchy-menubar-manager"
 
   property bool expanded: false
   property bool managePopupOpen: false

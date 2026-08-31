@@ -1,10 +1,10 @@
-# Menubar Manager
+# Omarchy Menubar Manager
 
 A Bartender/Ice-style menubar manager for the [Omarchy](https://omarchy.org)
 bar: collapse other bar widgets into a hover-to-reveal drawer, so your bar
 doesn't stay permanently cluttered with icons you only need occasionally.
 
-<!-- ![Menubar Manager, collapsed and hovered open](preview.png) -->
+<!-- ![Omarchy Menubar Manager, collapsed and hovered open](preview.png) -->
 
 ## Why
 
@@ -31,23 +31,21 @@ registered bar widget, not just tray icons.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/REPLACE_ME/kc-menubar-manager --enable --yes
+omarchy plugin add https://github.com/ultgames/omarchy-menubar-manager --enable --yes
 ```
-
-<!-- Replace REPLACE_ME above once this repo has a GitHub remote. -->
 
 The widget appears on the right side of the bar by default.
 
 To update later:
 
 ```bash
-omarchy plugin update kc.menubar-manager --yes
+omarchy plugin update kc.omarchy-menubar-manager --yes
 ```
 
 ## Remove
 
 ```bash
-omarchy plugin remove kc.menubar-manager --yes
+omarchy plugin remove kc.omarchy-menubar-manager --yes
 ```
 
 Removing it does **not** un-host anything automatically first — any widgets

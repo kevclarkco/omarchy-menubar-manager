@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "kc.menubar-manager",
-  "name": "Menubar Manager",
+  "id": "kc.omarchy-menubar-manager",
+  "name": "Omarchy Menubar Manager",
   "version": "0.1.0",
   "author": "kc",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "barWidget": "MenubarManager.qml"
   },
   "barWidget": {
-    "displayName": "Menubar Manager",
+    "displayName": "Omarchy Menubar Manager",
     "description": "Hides other bar widgets behind a hover-reveal drawer.",
     "category": "Layout",
     "allowMultiple": false,
