@@ -4,7 +4,7 @@ A Bartender/Ice-style menubar manager for the [Omarchy](https://omarchy.org)
 bar: collapse other bar widgets into a hover-to-reveal drawer, so your bar
 doesn't stay permanently cluttered with icons you only need occasionally.
 
-<!-- ![Omarchy Menubar Manager, collapsed and hovered open](preview.png) -->
+![Menubar Manager](preview.png)
 
 ## Why
 
