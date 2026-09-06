@@ -84,6 +84,16 @@ array instead, which keeps it enabled (so its component and its own
 settings-persistence keep working) without the bar auto-placing it anywhere
 — this widget then loads and shows it itself, inside the drawer.
 
+## Development
+
+`MenubarModel.js` is pure, dependency-free JS (no QML/Quickshell imports),
+so its host/un-host/reorder/tray-pinning logic has a test suite that runs
+outside the shell entirely:
+
+```bash
+node --test
+```
+
 ## License
 
 MIT
