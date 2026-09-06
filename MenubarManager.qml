@@ -692,6 +692,7 @@ BarWidget {
 
         Text {
           text: "Hosted widgets"
+          textFormat: Text.PlainText
           color: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
@@ -701,6 +702,7 @@ BarWidget {
         Text {
           visible: root.hostedIds.length === 0
           text: "Nothing hosted yet — add a widget below."
+          textFormat: Text.PlainText
           color: Qt.darker(root.foreground, 1.5)
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -730,6 +732,14 @@ BarWidget {
               anchors.right: upBtn.left
               anchors.rightMargin: Style.space(8)
               text: hostedRow.displayName
+              // displayName comes from another plugin's own manifest
+              // (barWidgetRegistry.metadataFor) — not something this plugin
+              // wrote, so it's untrusted input. Without this, a malicious
+              // manifest's displayName could contain markup Qt renders as
+              // rich text (Text.AutoText is the default), up to and
+              // including an <img src="..."> that fires a real HTTP
+              // request from the shared shell process.
+              textFormat: Text.PlainText
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall
@@ -801,6 +811,7 @@ BarWidget {
 
         Text {
           text: "Add a widget"
+          textFormat: Text.PlainText
           color: root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
@@ -825,6 +836,9 @@ BarWidget {
               anchors.right: addBtn.left
               anchors.rightMargin: Style.space(8)
               text: candidateRow.modelData.displayName
+              // Same untrusted-manifest concern as hostedRow's displayName
+              // Text above — see its comment.
+              textFormat: Text.PlainText
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall
