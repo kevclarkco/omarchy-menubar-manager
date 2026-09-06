@@ -185,6 +185,10 @@ BarWidget {
     persist(hostedIds, MenubarModel.toggleHide(hiddenIds, id))
   }
 
+  function moveHostedWidget(id, direction) {
+    persist(MenubarModel.moveHosted(hostedIds, id, direction), hiddenIds)
+  }
+
   function hostWidgetById(id) {
     if (!root.bar || !root.bar.shell || typeof root.bar.shell.mutateShellConfig !== "function") return
     // Host/un-host are structural bar.layout changes, which Bar.qml can't
@@ -710,6 +714,9 @@ BarWidget {
             required property var modelData
             readonly property string itemId: String(modelData)
             readonly property bool isHidden: root.hiddenIds.indexOf(itemId) !== -1
+            readonly property int itemIndex: root.hostedIds.indexOf(itemId)
+            readonly property bool canMoveUp: itemIndex > 0
+            readonly property bool canMoveDown: itemIndex !== -1 && itemIndex < root.hostedIds.length - 1
             readonly property var meta: root.bar && root.bar.barWidgetRegistry
               ? root.bar.barWidgetRegistry.metadataFor(itemId) : null
             readonly property string displayName: meta && meta.displayName ? meta.displayName : itemId
@@ -720,13 +727,47 @@ BarWidget {
             Text {
               anchors.verticalCenter: parent.verticalCenter
               anchors.left: parent.left
-              anchors.right: hideBtn.left
+              anchors.right: upBtn.left
               anchors.rightMargin: Style.space(8)
               text: hostedRow.displayName
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall
               elide: Text.ElideRight
+            }
+
+            // Reorders hostedIds directly — no relocation, no
+            // mutateShellConfig, same inline-settings persist() path as
+            // Hide — so this never touches bar.layout and never triggers
+            // the full-bar-rebuild machinery host/unhost has to.
+            Button {
+              id: upBtn
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.right: downBtn.left
+              anchors.rightMargin: Style.space(4)
+              enabled: hostedRow.canMoveUp
+              opacity: enabled ? 1.0 : 0.35
+              text: "▲"
+              foreground: root.foreground
+              horizontalPadding: 6
+              verticalPadding: 3
+              fontSize: Style.font.bodySmall
+              onClicked: root.moveHostedWidget(hostedRow.itemId, -1)
+            }
+
+            Button {
+              id: downBtn
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.right: hideBtn.left
+              anchors.rightMargin: Style.space(6)
+              enabled: hostedRow.canMoveDown
+              opacity: enabled ? 1.0 : 0.35
+              text: "▼"
+              foreground: root.foreground
+              horizontalPadding: 6
+              verticalPadding: 3
+              fontSize: Style.font.bodySmall
+              onClicked: root.moveHostedWidget(hostedRow.itemId, 1)
             }
 
             Button {

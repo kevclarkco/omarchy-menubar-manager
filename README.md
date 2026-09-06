@@ -18,8 +18,9 @@ registered bar widget, not just tray icons.
 
 - Hover the ⋯ icon to reveal hosted widgets; move away and it collapses
   again
-- A manage popup (click the ⋯ icon) to add, remove, or hide widgets
+- A manage popup (click the ⋯ icon) to add, remove, hide, or reorder widgets
 - **Add** moves a widget into the drawer
+- **▲/▼** reorders a hosted widget within the drawer
 - **Hide** keeps a widget hosted (its background service, if it has one,
   keeps running) without showing it anywhere
 - Hosted widgets work exactly as normal: click to open their own panel,
@@ -61,15 +62,14 @@ hosted, rather than in `bar.layout.*`.
 3. Hover the ⋯ icon to reveal what's hosted; click a hosted widget's icon
    to open its own panel, same as if it were still sitting directly on the
    bar.
-4. Back in the manage popup: **Hide** to keep it hosted but never shown,
-   **Remove** to put it back on the bar normally.
+4. Back in the manage popup: **▲/▼** to reorder within the drawer, **Hide**
+   to keep it hosted but never shown, **Remove** to put it back on the bar
+   normally.
 
 ## Limitations
 
-- **No reordering at all.** Hosted widgets sit in the drawer in the order
-  you added them, with no way to change that afterward — not by dragging,
-  and not through the manage popup either. Removing and re-adding a widget
-  puts it back at the *end*, not wherever you'd want it.
+- **No drag-and-drop.** Reordering works via the ▲/▼ buttons in the manage
+  popup, one step at a time — not by dragging the drawer icons directly.
 - **Hotkey/CLI summon doesn't reach hosted widgets.** `omarchy toggle <id>`
   or a Hyprland keybind bound to a widget won't find it while it's hosted —
   clicking it inside the drawer still opens its panel fine, only *external*

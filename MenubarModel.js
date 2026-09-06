@@ -234,6 +234,24 @@ function toggleHide(hiddenIds, id) {
   return h
 }
 
+// Swaps id with its neighbor in the given direction (negative = earlier in
+// the array/toward the glyph, positive = later) within the hosted list —
+// hostedIds is otherwise plain insertion order (hostWidget always pushes),
+// with nothing else that ever changes it. No-ops (returns an unchanged
+// copy) at either end or if id isn't present, so the caller can persist
+// the result unconditionally without needing its own bounds check.
+function moveHosted(hostedIds, id, direction) {
+  var arr = hostedIds.slice()
+  var idx = arr.indexOf(id)
+  if (idx === -1) return arr
+  var swapWith = idx + (direction < 0 ? -1 : 1)
+  if (swapWith < 0 || swapWith >= arr.length) return arr
+  var tmp = arr[idx]
+  arr[idx] = arr[swapWith]
+  arr[swapWith] = tmp
+  return arr
+}
+
 // hosted − hidden = the drawer bucket: every hosted widget is either hidden
 // or sitting in the drawer, there's no third state.
 function drawerBucket(hostedIds, hiddenIds) {
@@ -324,6 +342,7 @@ if (typeof module !== "undefined") {
     unhostWidget: unhostWidget,
     pinAfterTray: pinAfterTray,
     toggleHide: toggleHide,
+    moveHosted: moveHosted,
     drawerBucket: drawerBucket,
     candidateWidgets: candidateWidgets,
     defaultSectionForManifest: defaultSectionForManifest,
