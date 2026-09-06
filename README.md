@@ -34,7 +34,7 @@ registered bar widget, not just tray icons.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/ultgames/omarchy-menubar-manager --enable --yes
+omarchy plugin add https://github.com/kevclarkco/omarchy-menubar-manager --enable --yes
 ```
 
 The widget appears on the right side of the bar by default.
