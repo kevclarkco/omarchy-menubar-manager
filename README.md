@@ -71,13 +71,10 @@ hosted, rather than in `bar.layout.*`.
 
 ## Limitations
 
-- **No drag-and-drop.** Reordering works via the ▲/▼ buttons in the manage
-  popup, one step at a time — not by dragging the drawer icons directly.
 - **Hotkey/CLI summon doesn't reach hosted widgets.** `omarchy toggle <id>`
   or a Hyprland keybind bound to a widget won't find it while it's hosted —
   clicking it inside the drawer still opens its panel fine, only *external*
-  summon is affected. Worth fixing if you actually bind a hotkey to
-  something you also want to host.
+  summon is affected.
 
 ## How it works
 
