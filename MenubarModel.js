@@ -109,10 +109,13 @@ function hostWidget(config, ownId, widgetId) {
   // unhostWidget can put it back there instead of guessing from the
   // widget's manifest defaultSection — most manifests (e.g. the built-in
   // Workspaces widget) don't declare one at all, which silently sent every
-  // such widget to "right" on un-host regardless of its real origin.
+  // such widget to "right" on un-host regardless of its real origin. The
+  // index is remembered too (best-effort — other widgets may have moved in
+  // that section by the time this one is un-hosted) so it un-hosts back
+  // into roughly its old spot instead of always landing at the section's end.
   if (layoutLoc) {
     if (!isPlainObject(own.hostedFrom)) own.hostedFrom = {}
-    own.hostedFrom[id] = layoutLoc.section
+    own.hostedFrom[id] = { section: layoutLoc.section, index: layoutLoc.index }
   }
   // This is a structural bar.layout change, which forces Bar.qml to destroy
   // and recreate every module slot (see MenubarManager.qml's hostWidgetById
@@ -141,15 +144,26 @@ function unhostWidget(config, ownId, widgetId, fallbackSection) {
   if (!entry) entry = { id: id }
 
   var own = findOwnEntry(config, ownId)
-  // The section this widget actually came from (recorded by hostWidget)
-  // beats the manifest-guessed fallbackSection — most manifests don't
-  // declare a defaultSection at all, which isn't the same thing as this
-  // widget having genuinely belonged in "right".
+  // The section (and, best-effort, index) this widget actually came from
+  // (recorded by hostWidget) beats the manifest-guessed fallbackSection —
+  // most manifests don't declare a defaultSection at all, which isn't the
+  // same thing as this widget having genuinely belonged in "right". Older
+  // entries (persisted before hostedFrom recorded an index) show up here as
+  // a plain section string rather than {section, index} — handle both.
   var remembered = own && isPlainObject(own.hostedFrom) ? own.hostedFrom[id] : null
-  var section = ["left", "center", "right"].indexOf(remembered) !== -1
-    ? remembered
+  var rememberedSection = typeof remembered === "string" ? remembered
+    : (isPlainObject(remembered) ? remembered.section : null)
+  var rememberedIndex = isPlainObject(remembered) && typeof remembered.index === "number"
+    ? remembered.index : -1
+  var section = ["left", "center", "right"].indexOf(rememberedSection) !== -1
+    ? rememberedSection
     : (["left", "center", "right"].indexOf(fallbackSection) !== -1 ? fallbackSection : "right")
-  config.bar.layout[section].push(entry)
+  var target = config.bar.layout[section]
+  // Clamped, not exact: other widgets may have been added to or removed from
+  // this section while this one was hosted, so its original index can no
+  // longer line up perfectly — landing close beats always landing at the end.
+  var insertAt = rememberedIndex >= 0 ? Math.min(rememberedIndex, target.length) : target.length
+  target.splice(insertAt, 0, entry)
 
   if (own) {
     own.hosted = (own.hosted || []).filter(function(x) { return x !== id })
@@ -161,6 +175,40 @@ function unhostWidget(config, ownId, widgetId, fallbackSection) {
     own.popupOpen = true
   }
   return true
+}
+
+// Keeps this manager's own bar.layout entry immediately after omarchy.tray
+// in whichever section it's in — same idea as the shell's own
+// BarModel.pinTrayToInner, just for us instead of the tray, and done here
+// rather than in core shell code since we only have reach into our own
+// plugin. Called from MenubarManager.qml's Component.onCompleted: any
+// structural bar.layout change (a newly installed/enabled plugin appearing,
+// a drag-reorder, one of our own host/unhost calls) already destroys and
+// recreates every bar widget, this one included, so re-checking on
+// construction is enough to self-heal after every such change without
+// watching anything continuously. Returns false (no-op, caller shouldn't
+// bother persisting) when already correctly placed or when tray isn't in
+// the same section to pin against.
+function pinAfterTray(config, ownId) {
+  ensureShape(config)
+  var sections = ["left", "center", "right"]
+  for (var s = 0; s < sections.length; s++) {
+    var arr = config.bar.layout[sections[s]]
+    var ownIdx = -1, trayIdx = -1
+    for (var i = 0; i < arr.length; i++) {
+      var id = entryId(arr[i])
+      if (id === ownId) ownIdx = i
+      else if (id === "omarchy.tray") trayIdx = i
+    }
+    if (ownIdx === -1) continue
+    if (trayIdx === -1 || ownIdx === trayIdx + 1) return false
+    var entry = arr[ownIdx]
+    arr.splice(ownIdx, 1)
+    if (ownIdx < trayIdx) trayIdx -= 1
+    arr.splice(trayIdx + 1, 0, entry)
+    return true
+  }
+  return false
 }
 
 // Pin/hide only ever touch this manager's own inline settings — no
@@ -258,14 +306,24 @@ function normalizeIds(list) {
   return out
 }
 
-// Same live-QML-property caution as normalizeIds, for the id->section map:
-// only copy over well-formed string values into a fresh plain object.
+// Same live-QML-property caution as normalizeIds, for the id->origin map:
+// only copy over well-formed values into a fresh plain object. Each value is
+// either a bare section string (entries persisted before hostedFrom recorded
+// an index) or {section, index} (see hostWidget) — both are passed through
+// as-is; anything else is dropped.
 function normalizeSectionMap(map) {
   var out = {}
   if (!map || typeof map !== "object") return out
+  var sections = ["left", "center", "right"]
   for (var k in map) {
     var v = map[k]
-    if (typeof v === "string" && ["left", "center", "right"].indexOf(v) !== -1) out[k] = v
+    if (typeof v === "string" && sections.indexOf(v) !== -1) {
+      out[k] = v
+      continue
+    }
+    if (isPlainObject(v) && sections.indexOf(v.section) !== -1) {
+      out[k] = typeof v.index === "number" ? { section: v.section, index: v.index } : v.section
+    }
   }
   return out
 }
@@ -279,6 +337,7 @@ if (typeof module !== "undefined") {
     findOwnEntry: findOwnEntry,
     hostWidget: hostWidget,
     unhostWidget: unhostWidget,
+    pinAfterTray: pinAfterTray,
     togglePin: togglePin,
     toggleHide: toggleHide,
     classify: classify,

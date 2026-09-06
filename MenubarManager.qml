@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 import "MenubarModel.js" as MenubarModel
@@ -67,12 +68,91 @@ BarWidget {
       // Qt.callLater). Clearing synchronously here landed a second config
       // write on top of one still resolving, which is what triggered a
       // "binding loop detected for barConfig" warning during testing.
-      Qt.callLater(function() { root.persist(root.hostedIds, root.pinnedIds, root.hiddenIds) })
+      //
+      // `shell` and `moduleName` captured by value rather than reached
+      // through `root` when this closure actually runs: ANY other bar/tray
+      // item's own structural change (add/remove/reorder anywhere, not just
+      // this widget's) forces the same full-bar rebuild this popupOpen flag
+      // is meant to survive exactly once. If one of those lands first,
+      // `root` here is already destroyed, silently dropping this clear —
+      // which leaves popupOpen stuck true in shell.json forever, reopening
+      // this popup on every subsequent rebuild from then on, unrelated or
+      // not. Only `shell` (long-lived, outlives any single bar rebuild) is
+      // safe to still be holding by the time Qt.callLater fires.
+      //
+      // hosted/pinned/hidden/hostedFrom are deliberately NOT captured here
+      // the same way — two host/unhost clicks in quick succession each
+      // schedule their own one of these closures, and each structural
+      // rebuild replaces `root` with a fresh instance before the previous
+      // click's closure has necessarily run. A value captured now (when
+      // click 1's instance is constructed) can still be sitting in this
+      // closure when it finally runs after click 2 has already landed,
+      // and writing it then would silently revert click 2's addition —
+      // exactly what clicking Add on several widgets in a row did. Reading
+      // shell.shellConfig fresh at execution time instead always sees
+      // whatever the latest click actually wrote (persistShellConfig
+      // updates shellConfig in memory immediately, no round trip to wait
+      // on), so this only ever clears popupOpen off of the current entry
+      // rather than replacing the whole entry with a stale snapshot of it.
+      var shell = root.bar ? root.bar.shell : null
+      var moduleName = root.moduleName
+      Qt.callLater(function() {
+        if (!shell || typeof shell.updateEntryInline !== "function") return
+        var cfg = shell.shellConfig
+        var current = cfg ? MenubarModel.findOwnEntry(cfg, moduleName) : null
+        if (!current || current.popupOpen !== true) return
+        var next = { id: moduleName }
+        for (var k in current) if (k !== "id" && k !== "popupOpen") next[k] = current[k]
+        shell.updateEntryInline(moduleName, next)
+      })
     }
   }
 
   readonly property int itemGap: Style.space(4)
   readonly property int animationDuration: 600
+
+  // Keeps this widget immediately to the right of the tray's ⋯ chevron,
+  // wherever it is on the bar. Any structural bar.layout change — a newly
+  // installed/enabled plugin landing in this section, someone drag-reordering
+  // the bar, one of our own host/unhost calls — already destroys and
+  // recreates every bar widget, this one included (see hostWidgetById's
+  // comment), so re-checking once here on construction is enough to
+  // self-heal after every such change without watching anything on an
+  // ongoing basis.
+  //
+  // Checked read-only first rather than always mutating: mutateShellConfig
+  // always calls persistShellConfig regardless of whether the mutator
+  // actually changed anything (no dirty-check at that layer, unlike
+  // updateEntryInline), so calling it unconditionally here would rewrite
+  // shell.json on every single rebuild — including our own routine
+  // host/unhost, by far the most frequent trigger — rather than only on the
+  // rare occasion something actually put us somewhere else.
+  Component.onCompleted: {
+    if (!root.bar || typeof root.bar.layoutEntries !== "function") return
+    if (root.isPinnedAfterTray()) return
+    if (!root.bar.shell || typeof root.bar.shell.mutateShellConfig !== "function") return
+    root.bar.shell.mutateShellConfig(function(config) {
+      MenubarModel.pinAfterTray(config, root.moduleName)
+    })
+  }
+
+  // Read-only mirror of MenubarModel.pinAfterTray's placement check, against
+  // the bar's live layout rather than a config snapshot — used purely to
+  // decide whether that function's write is worth making at all.
+  function isPinnedAfterTray() {
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var entries = root.bar.layoutEntries(sections[s])
+      var ownIdx = -1, trayIdx = -1
+      for (var i = 0; i < entries.length; i++) {
+        var id = MenubarModel.entryId(entries[i])
+        if (id === root.moduleName) ownIdx = i
+        else if (id === "omarchy.tray") trayIdx = i
+      }
+      if (ownIdx !== -1) return trayIdx === -1 || ownIdx === trayIdx + 1
+    }
+    return true
+  }
 
   function persist(nextHosted, nextPinned, nextHidden) {
     if (!root.bar || !root.bar.shell || typeof root.bar.shell.updateEntryInline !== "function") return
@@ -310,7 +390,14 @@ BarWidget {
       root.injectHostedProps(item, widgetId)
       root.registerHostedPanels(widgetId, item)
     }
-    Component.onDestruction: root.unregisterHostedPanels(widgetId)
+    // `root` can already be null here: a full-bar rebuild (which every
+    // host/unhost causes) destroys this widget's own outer instance in the
+    // same pass as its nested hosted-widget Loaders, and there's no
+    // guaranteed order between the two — this fired on every single
+    // host/unhost, not just a dev hot-reload. Harmless to skip when it
+    // happens: hostedCoordinatorKeys belongs to the very `root` that's being
+    // torn down, so there's nothing left to keep it in sync for.
+    Component.onDestruction: if (root) root.unregisterHostedPanels(widgetId)
 
     // Hosted widgets aren't real ModuleSlots, so they never get Bar.qml's
     // own "this widget's panel is open" underline — reproduce it here,
@@ -460,141 +547,166 @@ BarWidget {
     bar: root.bar
     open: root.managePopupOpen
     contentWidth: managePopup.fittedContentWidth(Style.space(320))
-    contentHeight: managePopup.fittedContentHeight(manageColumn.implicitHeight)
+    // Capped, not just fitted to content: with enough hosted + hostable
+    // widgets this list gets taller than fittedContentHeight's own
+    // availableCardHeight clamp, which sizes the actual popup *window*
+    // smaller than manageColumn's uncapped implicitHeight — but the plain
+    // Column below doesn't know that and keeps laying every row out past
+    // the window's real (smaller) surface regardless. Rows beyond that
+    // point render nowhere (a Wayland surface can't paint outside its own
+    // buffer) and can't receive clicks either, which read as "Add doesn't
+    // work" for anything past however many rows happened to fit. Passing
+    // the same cap here and wrapping the content in a Flickable below turns
+    // that silent, unreachable overflow into an ordinary scrollbar.
+    readonly property int listMaxHeight: Style.space(420)
+    contentHeight: managePopup.fittedContentHeight(manageColumn.implicitHeight, listMaxHeight)
 
-    Column {
-      id: manageColumn
+    Flickable {
+      id: manageFlick
       anchors.fill: parent
-      spacing: Style.space(10)
+      contentWidth: width
+      contentHeight: manageColumn.implicitHeight
+      clip: true
+      boundsBehavior: Flickable.StopAtBounds
+      flickableDirection: Flickable.VerticalFlick
+      interactive: contentHeight > height
 
-      Text {
-        text: "Hosted widgets"
-        color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-        font.bold: true
-      }
+      ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-      Text {
-        visible: root.hostedIds.length === 0
-        text: "Nothing hosted yet — add a widget below."
-        color: Qt.darker(root.foreground, 1.5)
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        font.italic: true
-      }
-
-      Repeater {
-        model: root.hostedIds
-        delegate: Item {
-          id: hostedRow
-          required property var modelData
-          readonly property string itemId: String(modelData)
-          readonly property bool isPinned: root.pinnedIds.indexOf(itemId) !== -1
-          readonly property bool isHidden: root.hiddenIds.indexOf(itemId) !== -1
-          readonly property var meta: root.bar && root.bar.barWidgetRegistry
-            ? root.bar.barWidgetRegistry.metadataFor(itemId) : null
-          readonly property string displayName: meta && meta.displayName ? meta.displayName : itemId
-
-          width: manageColumn.width
-          implicitHeight: Style.space(28)
-
-          Text {
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.left: parent.left
-            anchors.right: pinBtn.left
-            anchors.rightMargin: Style.space(8)
-            text: hostedRow.displayName
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            elide: Text.ElideRight
-          }
-
-          Button {
-            id: pinBtn
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.right: hideBtn.left
-            anchors.rightMargin: Style.space(6)
-            text: hostedRow.isPinned ? "Unpin" : "Pin"
-            foreground: root.foreground
-            horizontalPadding: 8
-            verticalPadding: 3
-            fontSize: Style.font.bodySmall
-            onClicked: root.togglePin(hostedRow.itemId)
-          }
-
-          Button {
-            id: hideBtn
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.right: unhostBtn.left
-            anchors.rightMargin: Style.space(6)
-            text: hostedRow.isHidden ? "Show" : "Hide"
-            foreground: root.foreground
-            horizontalPadding: 8
-            verticalPadding: 3
-            fontSize: Style.font.bodySmall
-            onClicked: root.toggleHide(hostedRow.itemId)
-          }
-
-          Button {
-            id: unhostBtn
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.right: parent.right
-            text: "Remove"
-            foreground: root.foreground
-            horizontalPadding: 8
-            verticalPadding: 3
-            fontSize: Style.font.bodySmall
-            onClicked: root.unhostWidgetById(hostedRow.itemId)
+      Column {
+        id: manageColumn
+        width: manageFlick.width
+        spacing: Style.space(10)
+  
+        Text {
+          text: "Hosted widgets"
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          font.bold: true
+        }
+  
+        Text {
+          visible: root.hostedIds.length === 0
+          text: "Nothing hosted yet — add a widget below."
+          color: Qt.darker(root.foreground, 1.5)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.italic: true
+        }
+  
+        Repeater {
+          model: root.hostedIds
+          delegate: Item {
+            id: hostedRow
+            required property var modelData
+            readonly property string itemId: String(modelData)
+            readonly property bool isPinned: root.pinnedIds.indexOf(itemId) !== -1
+            readonly property bool isHidden: root.hiddenIds.indexOf(itemId) !== -1
+            readonly property var meta: root.bar && root.bar.barWidgetRegistry
+              ? root.bar.barWidgetRegistry.metadataFor(itemId) : null
+            readonly property string displayName: meta && meta.displayName ? meta.displayName : itemId
+  
+            width: manageColumn.width
+            implicitHeight: Style.space(28)
+  
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.left: parent.left
+              anchors.right: pinBtn.left
+              anchors.rightMargin: Style.space(8)
+              text: hostedRow.displayName
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              elide: Text.ElideRight
+            }
+  
+            Button {
+              id: pinBtn
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.right: hideBtn.left
+              anchors.rightMargin: Style.space(6)
+              text: hostedRow.isPinned ? "Unpin" : "Pin"
+              foreground: root.foreground
+              horizontalPadding: 8
+              verticalPadding: 3
+              fontSize: Style.font.bodySmall
+              onClicked: root.togglePin(hostedRow.itemId)
+            }
+  
+            Button {
+              id: hideBtn
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.right: unhostBtn.left
+              anchors.rightMargin: Style.space(6)
+              text: hostedRow.isHidden ? "Show" : "Hide"
+              foreground: root.foreground
+              horizontalPadding: 8
+              verticalPadding: 3
+              fontSize: Style.font.bodySmall
+              onClicked: root.toggleHide(hostedRow.itemId)
+            }
+  
+            Button {
+              id: unhostBtn
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.right: parent.right
+              text: "Remove"
+              foreground: root.foreground
+              horizontalPadding: 8
+              verticalPadding: 3
+              fontSize: Style.font.bodySmall
+              onClicked: root.unhostWidgetById(hostedRow.itemId)
+            }
           }
         }
-      }
-
-      Item { width: 1; height: Style.space(6) }
-
-      Text {
-        text: "Add a widget"
-        color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-        font.bold: true
-      }
-
-      // Recomputed each time the popup opens rather than kept live — the
-      // catalogue of registered widgets changes rarely enough that this is
-      // simpler than wiring a reactive dependency on barWidgetRegistry.revision.
-      Repeater {
-        model: root.managePopupOpen ? root.candidateWidgets() : []
-        delegate: Item {
-          id: candidateRow
-          required property var modelData
-
-          width: manageColumn.width
-          implicitHeight: Style.space(26)
-
-          Text {
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.left: parent.left
-            anchors.right: addBtn.left
-            anchors.rightMargin: Style.space(8)
-            text: candidateRow.modelData.displayName
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            elide: Text.ElideRight
-          }
-
-          Button {
-            id: addBtn
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.right: parent.right
-            text: "Add"
-            foreground: root.foreground
-            horizontalPadding: 8
-            verticalPadding: 3
-            fontSize: Style.font.bodySmall
-            onClicked: root.hostWidgetById(candidateRow.modelData.id)
+  
+        Item { width: 1; height: Style.space(6) }
+  
+        Text {
+          text: "Add a widget"
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          font.bold: true
+        }
+  
+        // Recomputed each time the popup opens rather than kept live — the
+        // catalogue of registered widgets changes rarely enough that this is
+        // simpler than wiring a reactive dependency on barWidgetRegistry.revision.
+        Repeater {
+          model: root.managePopupOpen ? root.candidateWidgets() : []
+          delegate: Item {
+            id: candidateRow
+            required property var modelData
+  
+            width: manageColumn.width
+            implicitHeight: Style.space(26)
+  
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.left: parent.left
+              anchors.right: addBtn.left
+              anchors.rightMargin: Style.space(8)
+              text: candidateRow.modelData.displayName
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              elide: Text.ElideRight
+            }
+  
+            Button {
+              id: addBtn
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.right: parent.right
+              text: "Add"
+              foreground: root.foreground
+              horizontalPadding: 8
+              verticalPadding: 3
+              fontSize: Style.font.bodySmall
+              onClicked: root.hostWidgetById(candidateRow.modelData.id)
+            }
           }
         }
       }
