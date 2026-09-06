@@ -129,7 +129,7 @@ function hostWidget(config, ownId, widgetId) {
 
 // Reverses hostWidget: pulls widgetId's entry out of config.plugins[] and
 // back into bar.layout.<fallbackSection>, preserving whatever settings it
-// accumulated while hosted. Drops it from this manager's hosted/pinned/hidden.
+// accumulated while hosted. Drops it from this manager's hosted/hidden.
 function unhostWidget(config, ownId, widgetId, fallbackSection) {
   var id = String(widgetId || "")
   if (!id) return false
@@ -163,11 +163,22 @@ function unhostWidget(config, ownId, widgetId, fallbackSection) {
   // this section while this one was hosted, so its original index can no
   // longer line up perfectly — landing close beats always landing at the end.
   var insertAt = rememberedIndex >= 0 ? Math.min(rememberedIndex, target.length) : target.length
+  // Never in front of our own entry, even if that's exactly where this
+  // widget's remembered index points: pinAfterTray guarantees we sit
+  // immediately after omarchy.tray, and a widget can easily have been
+  // recorded at that same low index (right after tray is a common spot)
+  // back when it was hosted — un-hosting it straight back there would push
+  // our own entry one slot to the right, breaking that guarantee the very
+  // next time anything un-hosts.
+  var ownIdx = -1
+  for (var i = 0; i < target.length; i++) {
+    if (entryId(target[i]) === ownId) { ownIdx = i; break }
+  }
+  if (ownIdx !== -1 && insertAt <= ownIdx) insertAt = ownIdx + 1
   target.splice(insertAt, 0, entry)
 
   if (own) {
     own.hosted = (own.hosted || []).filter(function(x) { return x !== id })
-    own.pinned = (own.pinned || []).filter(function(x) { return x !== id })
     own.hidden = (own.hidden || []).filter(function(x) { return x !== id })
     if (isPlainObject(own.hostedFrom)) delete own.hostedFrom[id]
     // See the matching comment in hostWidget: also a structural change,
@@ -211,50 +222,24 @@ function pinAfterTray(config, ownId) {
   return false
 }
 
-// Pin/hide only ever touch this manager's own inline settings — no
-// relocation, no mutateShellConfig — so they stay pure functions the QML
+// Hide only ever touches this manager's own inline settings — no
+// relocation, no mutateShellConfig — so it stays a pure function the QML
 // side persists in one updateEntryInline call, same shape as Tray.qml's
-// togglePin/toggleHide (Tray.qml L189-211).
-function togglePin(pinnedIds, hiddenIds, id) {
-  var p = pinnedIds.slice(), h = hiddenIds.slice()
-  var idx = p.indexOf(id)
-  if (idx !== -1) {
-    p.splice(idx, 1)
-  } else {
-    p.push(id)
-    var hi = h.indexOf(id)
-    if (hi !== -1) h.splice(hi, 1)
-  }
-  return { pinned: p, hidden: h }
-}
-
-function toggleHide(pinnedIds, hiddenIds, id) {
-  var p = pinnedIds.slice(), h = hiddenIds.slice()
+// toggleHide (Tray.qml L189-211).
+function toggleHide(hiddenIds, id) {
+  var h = hiddenIds.slice()
   var idx = h.indexOf(id)
-  if (idx !== -1) {
-    h.splice(idx, 1)
-  } else {
-    h.push(id)
-    var pi = p.indexOf(id)
-    if (pi !== -1) p.splice(pi, 1)
-  }
-  return { pinned: p, hidden: h }
+  if (idx !== -1) h.splice(idx, 1)
+  else h.push(id)
+  return h
 }
 
-// hosted − pinned − hidden = the drawer bucket, mirroring Tray.qml's
-// classifyItem/bucket (Tray.qml L155-181) over widget ids instead of tray items.
-function classify(id, pinnedIds, hiddenIds) {
-  if (hiddenIds.indexOf(id) !== -1) return "hidden"
-  if (pinnedIds.indexOf(id) !== -1) return "pinned"
-  return "drawer"
-}
-
-function bucket(category, hostedIds, pinnedIds, hiddenIds) {
+// hosted − hidden = the drawer bucket: every hosted widget is either hidden
+// or sitting in the drawer, there's no third state.
+function drawerBucket(hostedIds, hiddenIds) {
   var result = []
   for (var i = 0; i < hostedIds.length; i++) {
-    var id = hostedIds[i]
-    if (category === "all") { result.push(id); continue }
-    if (classify(id, pinnedIds, hiddenIds) === category) result.push(id)
+    if (hiddenIds.indexOf(hostedIds[i]) === -1) result.push(hostedIds[i])
   }
   return result
 }
@@ -338,10 +323,8 @@ if (typeof module !== "undefined") {
     hostWidget: hostWidget,
     unhostWidget: unhostWidget,
     pinAfterTray: pinAfterTray,
-    togglePin: togglePin,
     toggleHide: toggleHide,
-    classify: classify,
-    bucket: bucket,
+    drawerBucket: drawerBucket,
     candidateWidgets: candidateWidgets,
     defaultSectionForManifest: defaultSectionForManifest,
     normalizeIds: normalizeIds,

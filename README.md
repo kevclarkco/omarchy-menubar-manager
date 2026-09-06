@@ -18,9 +18,8 @@ registered bar widget, not just tray icons.
 
 - Hover the ⋯ icon to reveal hosted widgets; move away and it collapses
   again
-- A manage popup (click the ⋯ icon) to add, remove, pin, or hide widgets
+- A manage popup (click the ⋯ icon) to add, remove, or hide widgets
 - **Add** moves a widget into the drawer
-- **Pin** keeps a hosted widget always visible, outside the drawer
 - **Hide** keeps a widget hosted (its background service, if it has one,
   keeps running) without showing it anywhere
 - Hosted widgets work exactly as normal: click to open their own panel,
@@ -62,9 +61,8 @@ hosted, rather than in `bar.layout.*`.
 3. Hover the ⋯ icon to reveal what's hosted; click a hosted widget's icon
    to open its own panel, same as if it were still sitting directly on the
    bar.
-4. Back in the manage popup: **Pin** to keep something always visible
-   outside the drawer, **Hide** to keep it hosted but never shown, **Remove**
-   to put it back on the bar normally.
+4. Back in the manage popup: **Hide** to keep it hosted but never shown,
+   **Remove** to put it back on the bar normally.
 
 ## Limitations
 

@@ -42,15 +42,13 @@ BarWidget {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property var hostedIds: MenubarModel.normalizeIds(settings.hosted)
-  readonly property var pinnedIds: MenubarModel.normalizeIds(settings.pinned)
   readonly property var hiddenIds: MenubarModel.normalizeIds(settings.hidden)
   // Section each hosted widget actually came from, so unhostWidgetById can
   // put it back there. Must be threaded through every persist() call (not
   // just host/un-host) since updateEntryInline replaces the whole entry
   // rather than merging it — see persist() below.
   readonly property var hostedFrom: MenubarModel.normalizeSectionMap(settings.hostedFrom)
-  readonly property var drawerIds: MenubarModel.bucket("drawer", hostedIds, pinnedIds, hiddenIds)
-  readonly property var pinnedBucketIds: MenubarModel.bucket("pinned", hostedIds, pinnedIds, hiddenIds)
+  readonly property var drawerIds: MenubarModel.drawerBucket(hostedIds, hiddenIds)
 
   // Host/un-host destroy and recreate this widget mid-click (see
   // hostWidgetById below), taking any open manage popup down with it.
@@ -80,7 +78,7 @@ BarWidget {
       // not. Only `shell` (long-lived, outlives any single bar rebuild) is
       // safe to still be holding by the time Qt.callLater fires.
       //
-      // hosted/pinned/hidden/hostedFrom are deliberately NOT captured here
+      // hosted/hidden/hostedFrom are deliberately NOT captured here
       // the same way — two host/unhost clicks in quick succession each
       // schedule their own one of these closures, and each structural
       // rebuild replaces `root` with a fresh instance before the previous
@@ -154,16 +152,15 @@ BarWidget {
     return true
   }
 
-  function persist(nextHosted, nextPinned, nextHidden) {
+  function persist(nextHosted, nextHidden) {
     if (!root.bar || !root.bar.shell || typeof root.bar.shell.updateEntryInline !== "function") return
     root.bar.shell.updateEntryInline(root.moduleName, {
       id: root.moduleName,
       hosted: nextHosted,
-      pinned: nextPinned,
       hidden: nextHidden,
-      // Not an argument: updateEntryInline replaces the whole entry, so any
-      // plain pin/hide toggle would otherwise silently erase hostedFrom
-      // (only host/un-host, via mutateShellConfig, ever mean to change it).
+      // Not an argument: updateEntryInline replaces the whole entry, so a
+      // plain hide toggle would otherwise silently erase hostedFrom (only
+      // host/un-host, via mutateShellConfig, ever mean to change it).
       hostedFrom: root.hostedFrom
     })
   }
@@ -178,14 +175,8 @@ BarWidget {
     root.managePopupOpen = false
   }
 
-  function togglePin(id) {
-    var next = MenubarModel.togglePin(pinnedIds, hiddenIds, id)
-    persist(hostedIds, next.pinned, next.hidden)
-  }
-
   function toggleHide(id) {
-    var next = MenubarModel.toggleHide(pinnedIds, hiddenIds, id)
-    persist(hostedIds, next.pinned, next.hidden)
+    persist(hostedIds, MenubarModel.toggleHide(hiddenIds, id))
   }
 
   function hostWidgetById(id) {
@@ -361,9 +352,6 @@ BarWidget {
   component HostedWidgetSlot: Loader {
     id: hostedLoader
     required property var modelData
-    // True for the collapsible drawer bucket, false for the always-visible
-    // pinned row — only drawer items get torn down while collapsed, below.
-    property bool gatedByDrawer: false
     readonly property string widgetId: String(modelData)
     // clip:true on drawerClip only hides this widget's *paint* — the loaded
     // item, and every WidgetButton-style control nested inside it, keeps its
@@ -383,7 +371,7 @@ BarWidget {
     // control's own Component.onDestruction → unregisterClickTarget cleanup.
     // It reloads fresh the next time the drawer is hovered open, before
     // anything inside it is reachable to click.
-    active: (!gatedByDrawer || root.drawerShown)
+    active: root.drawerShown
       && !!(root.bar && root.bar.barWidgetRegistry && root.bar.barWidgetRegistry.has(widgetId))
     sourceComponent: active ? root.bar.barWidgetRegistry.widgets[widgetId].component : null
     onLoaded: {
@@ -508,20 +496,9 @@ BarWidget {
 
           Repeater {
             model: root.drawerIds
-            HostedWidgetSlot { gatedByDrawer: true }
+            HostedWidgetSlot {}
           }
         }
-      }
-    }
-
-    Row {
-      id: pinnedRow
-      anchors.verticalCenter: parent.verticalCenter
-      spacing: root.itemGap
-
-      Repeater {
-        model: root.pinnedBucketIds
-        HostedWidgetSlot {}
       }
     }
   }
@@ -601,19 +578,18 @@ BarWidget {
             id: hostedRow
             required property var modelData
             readonly property string itemId: String(modelData)
-            readonly property bool isPinned: root.pinnedIds.indexOf(itemId) !== -1
             readonly property bool isHidden: root.hiddenIds.indexOf(itemId) !== -1
             readonly property var meta: root.bar && root.bar.barWidgetRegistry
               ? root.bar.barWidgetRegistry.metadataFor(itemId) : null
             readonly property string displayName: meta && meta.displayName ? meta.displayName : itemId
-  
+
             width: manageColumn.width
             implicitHeight: Style.space(28)
-  
+
             Text {
               anchors.verticalCenter: parent.verticalCenter
               anchors.left: parent.left
-              anchors.right: pinBtn.left
+              anchors.right: hideBtn.left
               anchors.rightMargin: Style.space(8)
               text: hostedRow.displayName
               color: root.foreground
@@ -621,20 +597,7 @@ BarWidget {
               font.pixelSize: Style.font.bodySmall
               elide: Text.ElideRight
             }
-  
-            Button {
-              id: pinBtn
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.right: hideBtn.left
-              anchors.rightMargin: Style.space(6)
-              text: hostedRow.isPinned ? "Unpin" : "Pin"
-              foreground: root.foreground
-              horizontalPadding: 8
-              verticalPadding: 3
-              fontSize: Style.font.bodySmall
-              onClicked: root.togglePin(hostedRow.itemId)
-            }
-  
+
             Button {
               id: hideBtn
               anchors.verticalCenter: parent.verticalCenter
