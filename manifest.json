@@ -3,7 +3,7 @@
   "id": "kc.omarchy-menubar-manager",
   "name": "Omarchy Menubar Manager",
   "version": "0.2.0",
-  "author": "kc",
+  "author": "Kevin Clark",
   "license": "MIT",
   "description": "Collapse bar widgets into a hover-to-reveal drawer, with a manage popup to move widgets in and out.",
   "kinds": [
