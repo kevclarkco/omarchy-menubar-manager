@@ -27,6 +27,15 @@
 - Added tray-pinning: this widget now keeps itself immediately to the right
   of the tray's ⋯ chevron, self-correcting on any bar rebuild (mirrors the
   shell's own `BarModel.pinTrayToInner`)
+- Fixed un-host inserting a widget in front of our own icon when its
+  remembered position conflicted with the tray-pinning slot
+- Removed Pin/Unpin: a hosted widget is now either in the drawer or hidden,
+  no third "always visible" state — it only duplicated what Remove already
+  gave you
+- Added vertical bar support (`position: left`/`right`): a second layout
+  tree (mirroring the shell's own Tray.qml/Indicators.qml dual-Component
+  pattern) handles the drawer reveal, glyph rotation, and per-icon
+  "panel open" indicator along the vertical axis
 
 ## Known upstream issue (not fixable from this plugin)
 
@@ -46,13 +55,11 @@ note above, which checks before writing for exactly this reason).
 Roughly in priority order — see README "Limitations" for the user-facing
 description of each gap.
 
-1. **Left/right positioned bars.** Only horizontal bars are supported today;
-   `position: left`/`right` isn't implemented.
-2. **Hotkey/CLI summon reaching hosted widgets.** `omarchy toggle <id>` and
+1. **Hotkey/CLI summon reaching hosted widgets.** `omarchy toggle <id>` and
    Hyprland keybinds don't find a widget once it's hosted — only clicking
    inside the drawer opens its panel. Worth fixing for anyone who binds a
    hotkey to something they also want to host.
-3. **Drag-and-drop reordering.** Currently reordering (if any) goes through
+2. **Drag-and-drop reordering.** Currently reordering (if any) goes through
    the manage popup only, not by dragging hosted icons directly.
 
 ## Notes

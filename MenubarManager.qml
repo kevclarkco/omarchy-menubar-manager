@@ -14,12 +14,10 @@ import "MenubarModel.js" as MenubarModel
 // slots from bar.layout.*. We then Loader-instantiate its Component
 // ourselves from bar.barWidgetRegistry.
 //
-// v1 scope: horizontal bar only (root.vertical branch not implemented).
 // Hosted widgets are NOT registered in bar.moduleSlots, so Hyprland
 // hotkeys / `omarchy toggle <id>` bound to a hosted widget won't find it
 // while hosted — clicking it inside the drawer still opens its own panel
-// fine, only external hotkey-summon is affected. See plan doc for why this
-// is an acceptable v1 tradeoff.
+// fine, only external hotkey-summon is affected.
 BarWidget {
   id: root
   moduleName: "kc.omarchy-menubar-manager"
@@ -27,16 +25,24 @@ BarWidget {
   property bool expanded: false
   property bool managePopupOpen: false
 
-  // Bar.qml's ModuleSlot draws an underline under whichever widget's popout
-  // is active (bar.activePopout, which opening the manage popup sets to
-  // this widget), sized by default to 55% of the *whole slot's* width. That
-  // slot can be anywhere from 27px (collapsed) to well over 100px (drawer
-  // open, several hosted icons showing) — nothing to do with how wide the
-  // glyph that actually opens the popup is, so the mark ballooned across
-  // several drawer icons instead of marking just the glyph. Declaring this
-  // is the sanctioned override (see panelIndicatorExtent in Bar.qml): any
-  // widget can report the width it actually wants the mark drawn at.
-  readonly property real openPanelIndicatorWidth: expandIcon.width
+  // Bar.qml's ModuleSlot draws an underline (top/bottom bar) or sideline
+  // (left/right bar) under whichever widget's popout is active
+  // (bar.activePopout, which opening the manage popup sets to this widget),
+  // sized by default to 55% of the *whole slot's* extent. That slot can be
+  // anywhere from 27px (collapsed) to well over 100px (drawer open, several
+  // hosted icons showing) — nothing to do with how wide/tall the glyph that
+  // actually opens the popup is, so the mark ballooned across several
+  // drawer icons instead of marking just the glyph. Declaring these is the
+  // sanctioned override (see panelIndicatorExtent in Bar.qml, which reads
+  // openPanelIndicatorWidth on a horizontal bar and openPanelIndicatorHeight
+  // on a vertical one): a widget can report the extent it actually wants
+  // the mark drawn at. Read off contentLoader.item rather than an `expandIcon`
+  // id directly: the glyph lives inside whichever of horizontalLayout/
+  // verticalLayout is currently loaded, and ids declared inside a Component
+  // aren't reachable from outside it — each layout's root Item exposes its
+  // own glyph's size via the glyphWidth/glyphHeight aliases instead.
+  readonly property real openPanelIndicatorWidth: contentLoader.item ? contentLoader.item.glyphWidth : 0
+  readonly property real openPanelIndicatorHeight: contentLoader.item ? contentLoader.item.glyphHeight : 0
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -388,10 +394,12 @@ BarWidget {
     Component.onDestruction: if (root) root.unregisterHostedPanels(widgetId)
 
     // Hosted widgets aren't real ModuleSlots, so they never get Bar.qml's
-    // own "this widget's panel is open" underline — reproduce it here,
-    // matching its look (Color.accent, same 55%-of-width sizing) and
-    // per-icon, driven by the same openHostedPanels tracking already used
-    // to keep the drawer open while a hosted panel is up.
+    // own "this widget's panel is open" underline/sideline — reproduce it
+    // here, matching its look (Color.accent, same 55%-of-extent sizing and
+    // top/bottom-vs-left/right positioning as Bar.qml's own
+    // openPanelIndicator) and per-icon, driven by the same
+    // openHostedPanels tracking already used to keep the drawer open while
+    // a hosted panel is up.
     Rectangle {
       id: openIndicator
       readonly property int inset: Style.space(2)
@@ -399,10 +407,18 @@ BarWidget {
       opacity: root.openHostedPanels[hostedLoader.widgetId] === true ? 0.9 : 0
       color: Color.accent
       radius: Math.min(width, height) / 2
-      width: Math.max(Style.space(10), Math.round(parent.width * 0.55))
-      height: Style.space(2)
-      anchors.horizontalCenter: parent.horizontalCenter
-      y: (root.bar && root.bar.position === "top") ? parent.height - height - inset : inset
+      width: root.vertical ? Style.space(2) : Math.max(Style.space(10), Math.round(parent.width * 0.55))
+      height: root.vertical ? Math.max(Style.space(10), Math.round(parent.height * 0.55)) : Style.space(2)
+      // Explicit x/y on both axes, not anchors.*Center paired with an
+      // explicit position on the other axis — mixing an anchor and a direct
+      // position binding for the same item is a recipe for the anchor
+      // silently losing to (or fighting with) the explicit binding.
+      x: root.vertical
+        ? ((root.bar && root.bar.position === "left") ? parent.width - width - inset : inset)
+        : Math.round((parent.width - width) / 2)
+      y: root.vertical
+        ? Math.round((parent.height - height) / 2)
+        : ((root.bar && root.bar.position === "top") ? parent.height - height - inset : inset)
       z: 50
 
       Behavior on opacity {
@@ -416,87 +432,202 @@ BarWidget {
   // must stay reachable even with nothing hosted yet.
   visible: true
   clip: false
-  implicitWidth: contentRow.implicitWidth
-  implicitHeight: root.barSize
+  implicitWidth: root.vertical ? root.barSize : contentLoader.implicitWidth
+  implicitHeight: root.vertical ? contentLoader.implicitHeight : root.barSize
 
-  Row {
-    id: contentRow
-    anchors.verticalCenter: parent.verticalCenter
-    spacing: root.itemGap
+  // Two full layout trees rather than one with `if (root.vertical)` sprinkled
+  // through every anchor, mirroring how the shell's own Tray.qml and
+  // Indicators.qml handle their orientation-dependent hover-reveal strips —
+  // the established idiom here for "reveal along whichever axis the bar
+  // runs," not a Tray-specific one-off. Shared state (expanded, drawerShown,
+  // hostedCoordinatorKeys, HostedWidgetSlot itself) stays declared once at
+  // the root, same as today; only the geometry differs per tree, so only the
+  // geometry is duplicated.
+  Loader {
+    id: contentLoader
+    anchors.fill: parent
+    sourceComponent: root.vertical ? verticalLayout : horizontalLayout
+  }
+
+  Component {
+    id: horizontalLayout
 
     Item {
-      id: drawerArea
-      width: expandIcon.implicitWidth + drawerClip.width
-      height: root.barSize
-
-      // Filters short, unrelated hover blips (e.g. an unrelated widget's own
-      // panel opening/closing elsewhere on the bar momentarily disturbing
-      // what Hyprland reports here) before they ever reach root.expanded.
-      // The false-then-true dance a hosted panel's own open/close produces
-      // is a longer, *genuine* hover change, not blip noise — that case is
-      // handled separately below via wantDrawerOpen/drawerCloseTimer.
-      HoverHandler {
-        id: drawerHover
-        onHoveredChanged: hoverSettleTimer.restart()
-      }
-
-      Timer {
-        id: hoverSettleTimer
-        interval: 150
-        onTriggered: root.expanded = drawerHover.hovered
-      }
-
-      BarIconButton {
-        id: expandIcon
-        bar: root.bar
-        width: implicitWidth
-        height: implicitHeight
-        // Anchored to the right (not left) so drawerClip below grows
-        // leftward, away from the glyph, instead of pushing it — see the
-        // comment on drawerClip for why that keeps the glyph stationary
-        // under the cursor as the drawer opens.
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        text: ""
-        // Either button opens the manage popup — unlike the system tray
-        // (whose chevron has no popup of its own to open on left-click),
-        // this widget's only purpose when nothing is hosted yet is to be a
-        // discoverable entry point, so don't require right-click specifically.
-        onPressed: function(button) {
-          root.managePopupOpen = !root.managePopupOpen
-        }
-      }
+      id: layoutRoot
+      implicitWidth: drawerArea.width
+      implicitHeight: root.barSize
+      readonly property alias glyphWidth: expandIcon.width
+      readonly property alias glyphHeight: expandIcon.height
 
       Item {
-        id: drawerClip
-        // Right edge pinned to the glyph, growing leftward as width
-        // increases (not anchors.left, which would grow rightward and push
-        // the glyph — and everything after it in the bar's right-anchored
-        // row — further left to compensate, sliding the glyph out from
-        // under whatever's hovering it).
-        anchors.right: expandIcon.left
+        id: drawerArea
         anchors.verticalCenter: parent.verticalCenter
-        width: root.drawerShown ? drawerContent.implicitWidth : 0
+        width: expandIcon.implicitWidth + drawerClip.width
         height: root.barSize
-        clip: true
 
-        Behavior on width {
-          NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+        // Filters short, unrelated hover blips (e.g. an unrelated widget's
+        // own panel opening/closing elsewhere on the bar momentarily
+        // disturbing what Hyprland reports here) before they ever reach
+        // root.expanded. The false-then-true dance a hosted panel's own
+        // open/close produces is a longer, *genuine* hover change, not blip
+        // noise — that case is handled separately below via
+        // wantDrawerOpen/drawerCloseTimer.
+        HoverHandler {
+          id: drawerHover
+          onHoveredChanged: hoverSettleTimer.restart()
         }
 
-        Row {
-          id: drawerContent
-          // Pinned to this clip's right edge (nearest the glyph) rather
-          // than the default left-aligned x:0, so revealed icons unfurl
-          // outward from next to the glyph as the clip widens, instead of
-          // from its far (left) edge inward.
+        Timer {
+          id: hoverSettleTimer
+          interval: 150
+          onTriggered: root.expanded = drawerHover.hovered
+        }
+
+        BarIconButton {
+          id: expandIcon
+          bar: root.bar
+          width: implicitWidth
+          height: implicitHeight
+          // Anchored to the right (not left) so drawerClip below grows
+          // leftward, away from the glyph, instead of pushing it — see the
+          // comment on drawerClip for why that keeps the glyph stationary
+          // under the cursor as the drawer opens.
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
-          spacing: root.itemGap
+          text: ""
+          // Either button opens the manage popup — unlike the system tray
+          // (whose chevron has no popup of its own to open on left-click),
+          // this widget's only purpose when nothing is hosted yet is to be
+          // a discoverable entry point, so don't require right-click
+          // specifically.
+          onPressed: function(button) {
+            root.managePopupOpen = !root.managePopupOpen
+          }
+        }
 
-          Repeater {
-            model: root.drawerIds
-            HostedWidgetSlot {}
+        Item {
+          id: drawerClip
+          // Right edge pinned to the glyph, growing leftward as width
+          // increases (not anchors.left, which would grow rightward and
+          // push the glyph — and everything after it in the bar's
+          // right-anchored row — further left to compensate, sliding the
+          // glyph out from under whatever's hovering it).
+          anchors.right: expandIcon.left
+          anchors.verticalCenter: parent.verticalCenter
+          width: root.drawerShown ? drawerContent.implicitWidth : 0
+          height: root.barSize
+          clip: true
+
+          Behavior on width {
+            NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+          }
+
+          Row {
+            id: drawerContent
+            // Pinned to this clip's right edge (nearest the glyph) rather
+            // than the default left-aligned x:0, so revealed icons unfurl
+            // outward from next to the glyph as the clip widens, instead of
+            // from its far (left) edge inward.
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: root.itemGap
+
+            Repeater {
+              model: root.drawerIds
+              HostedWidgetSlot {}
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Component {
+    id: verticalLayout
+
+    Item {
+      id: layoutRoot
+      implicitWidth: root.barSize
+      implicitHeight: drawerArea.height
+      readonly property alias glyphWidth: expandIcon.width
+      readonly property alias glyphHeight: expandIcon.height
+
+      Item {
+        id: drawerArea
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: root.barSize
+        height: expandIcon.implicitHeight + drawerClip.height
+
+        // Mirrors horizontalLayout's own hover-blip filtering — see its
+        // comment for why this is debounced through a settle timer rather
+        // than driving root.expanded directly.
+        HoverHandler {
+          id: drawerHover
+          onHoveredChanged: hoverSettleTimer.restart()
+        }
+
+        Timer {
+          id: hoverSettleTimer
+          interval: 150
+          onTriggered: root.expanded = drawerHover.hovered
+        }
+
+        BarIconButton {
+          id: expandIcon
+          bar: root.bar
+          width: implicitWidth
+          height: implicitHeight
+          // Fixed at the bottom (not the top): the bar's vertical right
+          // section is bottom-anchored (outermost widget touches the
+          // screen edge), the same as the horizontal right section being
+          // right-anchored — confirmed live, top-anchoring this made the
+          // glyph itself drift upward as the drawer opened, since only the
+          // bottom edge of a widget in that section stays fixed in screen
+          // coordinates as the widget's own reported size grows; the top
+          // edge is exactly what shifts to make room. drawerClip below
+          // grows upward, away from the glyph, so it never pushes it
+          // either. Rotated to read top-to-bottom alongside a vertical
+          // bar, matching Tray's own chevron on a vertical bar.
+          anchors.bottom: parent.bottom
+          anchors.horizontalCenter: parent.horizontalCenter
+          text: ""
+          textRotation: 90
+          onPressed: function(button) {
+            root.managePopupOpen = !root.managePopupOpen
+          }
+        }
+
+        Item {
+          id: drawerClip
+          // Bottom edge pinned to the glyph, growing upward as height
+          // increases (not anchors.top, which would grow downward and
+          // push the glyph — and everything below it in the bar's
+          // bottom-anchored section — further down to compensate, sliding
+          // the glyph out from under whatever's hovering it).
+          anchors.bottom: expandIcon.top
+          anchors.horizontalCenter: parent.horizontalCenter
+          width: root.barSize
+          height: root.drawerShown ? drawerContent.implicitHeight : 0
+          clip: true
+
+          Behavior on height {
+            NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
+          }
+
+          Column {
+            id: drawerContent
+            // Pinned to this clip's bottom edge (nearest the glyph) rather
+            // than the default top-aligned y:0, so revealed icons unfurl
+            // upward from next to the glyph as the clip grows, instead of
+            // from its far (top) edge downward.
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: root.itemGap
+
+            Repeater {
+              model: root.drawerIds
+              HostedWidgetSlot {}
+            }
           }
         }
       }

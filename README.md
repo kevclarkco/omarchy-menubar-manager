@@ -66,7 +66,6 @@ hosted, rather than in `bar.layout.*`.
 
 ## Limitations
 
-- **Horizontal bars only.** `position: left`/`right` isn't implemented yet.
 - **No drag-and-drop.** Reordering happens through the manage popup, not by
   dragging.
 - **Hotkey/CLI summon doesn't reach hosted widgets.** `omarchy toggle <id>`
