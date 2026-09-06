@@ -689,7 +689,7 @@ BarWidget {
         id: manageColumn
         width: manageFlick.width
         spacing: Style.space(10)
-  
+
         Text {
           text: "Hosted widgets"
           color: root.foreground
@@ -697,7 +697,7 @@ BarWidget {
           font.pixelSize: Style.font.body
           font.bold: true
         }
-  
+
         Text {
           visible: root.hostedIds.length === 0
           text: "Nothing hosted yet — add a widget below."
@@ -706,7 +706,7 @@ BarWidget {
           font.pixelSize: Style.font.bodySmall
           font.italic: true
         }
-  
+
         Repeater {
           model: root.hostedIds
           delegate: Item {
@@ -782,7 +782,7 @@ BarWidget {
               fontSize: Style.font.bodySmall
               onClicked: root.toggleHide(hostedRow.itemId)
             }
-  
+
             Button {
               id: unhostBtn
               anchors.verticalCenter: parent.verticalCenter
@@ -796,9 +796,9 @@ BarWidget {
             }
           }
         }
-  
+
         Item { width: 1; height: Style.space(6) }
-  
+
         Text {
           text: "Add a widget"
           color: root.foreground
@@ -806,7 +806,7 @@ BarWidget {
           font.pixelSize: Style.font.body
           font.bold: true
         }
-  
+
         // Recomputed each time the popup opens rather than kept live — the
         // catalogue of registered widgets changes rarely enough that this is
         // simpler than wiring a reactive dependency on barWidgetRegistry.revision.
@@ -815,10 +815,10 @@ BarWidget {
           delegate: Item {
             id: candidateRow
             required property var modelData
-  
+
             width: manageColumn.width
             implicitHeight: Style.space(26)
-  
+
             Text {
               anchors.verticalCenter: parent.verticalCenter
               anchors.left: parent.left
@@ -830,7 +830,7 @@ BarWidget {
               font.pixelSize: Style.font.bodySmall
               elide: Text.ElideRight
             }
-  
+
             Button {
               id: addBtn
               anchors.verticalCenter: parent.verticalCenter

@@ -16,8 +16,11 @@ registered bar widget, not just tray icons.
 
 ## Features
 
+- Works on horizontal (top/bottom) and vertical (left/right) bars alike
 - Hover the ⋯ icon to reveal hosted widgets; move away and it collapses
   again
+- The ⋯ icon keeps itself immediately next to the system tray, wherever
+  that ends up on your bar
 - A manage popup (click the ⋯ icon) to add, remove, hide, or reorder widgets
 - **Add** moves a widget into the drawer
 - **▲/▼** reorders a hosted widget within the drawer
