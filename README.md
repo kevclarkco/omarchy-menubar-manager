@@ -66,8 +66,10 @@ hosted, rather than in `bar.layout.*`.
 
 ## Limitations
 
-- **No drag-and-drop.** Reordering happens through the manage popup, not by
-  dragging.
+- **No reordering at all.** Hosted widgets sit in the drawer in the order
+  you added them, with no way to change that afterward — not by dragging,
+  and not through the manage popup either. Removing and re-adding a widget
+  puts it back at the *end*, not wherever you'd want it.
 - **Hotkey/CLI summon doesn't reach hosted widgets.** `omarchy toggle <id>`
   or a Hyprland keybind bound to a widget won't find it while it's hosted —
   clicking it inside the drawer still opens its panel fine, only *external*
