@@ -39,6 +39,11 @@ omarchy plugin add https://github.com/kevclarkco/omarchy-menubar-manager --enabl
 
 The widget appears on the right side of the bar by default.
 
+Version 0.2.1 restores compatibility with Omarchy 4.0.3's scoped plugin
+APIs. The manager now obtains the widget catalog through Omarchy's supported
+read-only service injection, so the hover drawer can render its hosted
+widgets without accessing the shell's internal bar object.
+
 To update later:
 
 ```bash
