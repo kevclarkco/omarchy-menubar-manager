@@ -1,5 +1,15 @@
 # Omarchy Menubar Manager
 
+> **⚠️ Retired for now.** As of Omarchy 4.0.3, third-party `bar-widget`
+> plugins lost the shell-config write access this plugin needs to add or
+> remove hosted widgets — see [Limitations](#limitations). **Add and
+> Remove in the manage popup do nothing on 4.0.3+.** Nothing else is
+> affected: widgets already hosted before you hit 4.0.3 keep rendering,
+> reordering, hiding/showing, and opening normally. This project is paused
+> — not abandoned — until Omarchy exposes a capability that covers this
+> pattern, or a workaround turns up. New installs aren't recommended right
+> now unless you're fine with a fixed, unchangeable set of hosted widgets.
+
 A Bartender/Ice-style menubar manager for the [Omarchy](https://omarchy.org)
 bar: collapse other bar widgets into a hover-to-reveal drawer, so your bar
 doesn't stay permanently cluttered with icons you only need occasionally.
@@ -76,6 +86,18 @@ hosted, rather than in `bar.layout.*`.
 
 ## Limitations
 
+- **Add/Remove don't work on Omarchy 4.0.3+.** Adding or removing a hosted
+  widget requires moving *another* plugin's entry between `bar.layout.*`
+  and the top-level `plugins[]` — a shell-config write Omarchy 4.0.3
+  restricts to `bar`-kind (full-bar-replacement) plugins. This plugin is a
+  `bar-widget`, so `mutateShellConfig` refuses the write and Add/Remove
+  silently do nothing. There's no plugin-side fix: it would need Omarchy to
+  add a scoped capability for this pattern, or the plugin to become a full
+  bar replacement (a much bigger change than "let me host a few widgets").
+  Work around it by editing `~/.config/omarchy/shell.json` directly: move
+  the widget's entry between its `bar.layout.<section>` array and the
+  top-level `plugins[]` array, and add/remove its id from this plugin's own
+  `hosted`/`hidden` lists in its `bar.layout` entry.
 - **Hotkey/CLI summon doesn't reach hosted widgets.** `omarchy toggle <id>`
   or a Hyprland keybind bound to a widget won't find it while it's hosted —
   clicking it inside the drawer still opens its panel fine, only *external*
