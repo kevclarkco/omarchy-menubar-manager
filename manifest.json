@@ -2,15 +2,17 @@
   "schemaVersion": 1,
   "id": "kc.omarchy-menubar-manager",
   "name": "Omarchy Menubar Manager",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "Kevin Clark",
   "license": "MIT",
   "description": "Collapse bar widgets into a hover-to-reveal drawer, with a manage popup to move widgets in and out.",
   "kinds": [
-    "bar-widget"
+    "bar-widget",
+    "service"
   ],
   "entryPoints": {
-    "barWidget": "MenubarManager.qml"
+    "barWidget": "MenubarManager.qml",
+    "service": "Service.qml"
   },
   "barWidget": {
     "displayName": "Omarchy Menubar Manager",

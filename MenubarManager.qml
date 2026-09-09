@@ -12,7 +12,8 @@ import "MenubarModel.js" as MenubarModel
 // barWidgetRegistry, its own settings-persistence keeps working) without
 // Bar.qml auto-rendering a ModuleSlot for it, since Bar.qml only builds
 // slots from bar.layout.*. We then Loader-instantiate its Component
-// ourselves from bar.barWidgetRegistry.
+// ourselves from the detached barWidgetRegistry snapshot injected into our
+// companion service.
 //
 // Hosted widgets are NOT registered in bar.moduleSlots, so Hyprland
 // hotkeys / `omarchy toggle <id>` bound to a hosted widget won't find it
@@ -46,6 +47,11 @@ BarWidget {
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  readonly property var managerService: bar && bar.shell
+    && typeof bar.shell.serviceFor === "function"
+    ? bar.shell.serviceFor(moduleName) : null
+  readonly property var widgetRegistry: managerService
+    ? managerService.barWidgetRegistry : null
 
   readonly property var hostedIds: MenubarModel.normalizeIds(settings.hosted)
   readonly property var hiddenIds: MenubarModel.normalizeIds(settings.hidden)
@@ -240,8 +246,8 @@ BarWidget {
   }
 
   function candidateWidgets() {
-    if (!root.bar || !root.bar.barWidgetRegistry) return []
-    var registry = root.bar.barWidgetRegistry
+    if (!root.widgetRegistry) return []
+    var registry = root.widgetRegistry
     var ids = registry.availableIds()
     return MenubarModel.candidateWidgets(ids, function(id) { return registry.metadataFor(id) }, hostedIds, root.moduleName)
   }
@@ -382,8 +388,8 @@ BarWidget {
     // It reloads fresh the next time the drawer is hovered open, before
     // anything inside it is reachable to click.
     active: root.drawerShown
-      && !!(root.bar && root.bar.barWidgetRegistry && root.bar.barWidgetRegistry.has(widgetId))
-    sourceComponent: active ? root.bar.barWidgetRegistry.widgets[widgetId].component : null
+      && !!(root.widgetRegistry && root.widgetRegistry.has(widgetId))
+    sourceComponent: active ? root.widgetRegistry.widgets[widgetId].component : null
     onLoaded: {
       root.injectHostedProps(item, widgetId)
       root.registerHostedPanels(widgetId, item)
@@ -719,8 +725,8 @@ BarWidget {
             readonly property int itemIndex: root.hostedIds.indexOf(itemId)
             readonly property bool canMoveUp: itemIndex > 0
             readonly property bool canMoveDown: itemIndex !== -1 && itemIndex < root.hostedIds.length - 1
-            readonly property var meta: root.bar && root.bar.barWidgetRegistry
-              ? root.bar.barWidgetRegistry.metadataFor(itemId) : null
+            readonly property var meta: root.widgetRegistry
+              ? root.widgetRegistry.metadataFor(itemId) : null
             readonly property string displayName: meta && meta.displayName ? meta.displayName : itemId
 
             width: manageColumn.width
