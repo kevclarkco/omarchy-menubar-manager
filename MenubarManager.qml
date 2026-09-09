@@ -343,10 +343,20 @@ BarWidget {
   // while still expanding it immediately the moment either turns true.
   readonly property bool wantDrawerOpen: expanded || anyHostedPanelOpen
   property bool drawerShown: false
+  // Keep the hosted items painted while the clip animates closed. Tying the
+  // Loaders directly to drawerShown destroyed their contents on the first
+  // closing frame, leaving the width/height Behavior to animate empty space.
+  // That was especially visible when this manager was the leftmost item in
+  // the right section: no earlier sibling moved during the resize to disguise
+  // the instantaneous disappearance. Each layout unloads the content once
+  // its animated clip actually reaches zero, preserving the collapsed-state
+  // click-target cleanup described in HostedWidgetSlot below.
+  property bool drawerContentLoaded: false
 
   onWantDrawerOpenChanged: {
     if (wantDrawerOpen) {
       drawerCloseTimer.stop()
+      root.drawerContentLoaded = true
       root.drawerShown = true
     } else {
       drawerCloseTimer.restart()
@@ -376,12 +386,13 @@ BarWidget {
     // local `opacity`/`visible` stay whatever they were regardless of an
     // ancestor's), so the eligibility checks in moduleTargetClickable()
     // never see the change. The only reliable fix is to stop the widget (and
-    // everything nested in it) existing at all while collapsed: gating
-    // `active` on drawerShown fully destroys it, which correctly runs each
-    // control's own Component.onDestruction → unregisterClickTarget cleanup.
-    // It reloads fresh the next time the drawer is hovered open, before
-    // anything inside it is reachable to click.
-    active: root.drawerShown
+    // everything nested in it) existing once the drawer has fully collapsed.
+    // drawerContentLoaded stays true during the closing animation, then the
+    // clip's zero-size handler clears it and runs every control's own
+    // Component.onDestruction → unregisterClickTarget cleanup. It reloads
+    // before the next opening animation, before anything inside it is
+    // reachable to click.
+    active: root.drawerContentLoaded
       && !!(root.bar && root.bar.barWidgetRegistry && root.bar.barWidgetRegistry.has(widgetId))
     sourceComponent: active ? root.bar.barWidgetRegistry.widgets[widgetId].component : null
     onLoaded: {
@@ -522,6 +533,11 @@ BarWidget {
           height: root.barSize
           clip: true
 
+          onWidthChanged: {
+            if (!root.drawerShown && width <= 0.5)
+              root.drawerContentLoaded = false
+          }
+
           Behavior on width {
             NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
           }
@@ -613,6 +629,11 @@ BarWidget {
           width: root.barSize
           height: root.drawerShown ? drawerContent.implicitHeight : 0
           clip: true
+
+          onHeightChanged: {
+            if (!root.drawerShown && height <= 0.5)
+              root.drawerContentLoaded = false
+          }
 
           Behavior on height {
             NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic }
