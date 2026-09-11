@@ -1,45 +1,65 @@
 # Omarchy Menubar Manager
 
-> **⚠️ Retired for now.** As of Omarchy 4.0.3, third-party `bar-widget`
-> plugins lost the shell-config write access this plugin needs to add or
-> remove hosted widgets — see [Limitations](#limitations). **Add and
-> Remove in the manage popup do nothing on 4.0.3+.** Nothing else is
-> affected: widgets already hosted before you hit 4.0.3 keep rendering,
-> reordering, hiding/showing, and opening normally. This project is paused
-> — not abandoned — until Omarchy exposes a capability that covers this
-> pattern, or a workaround turns up. New installs aren't recommended right
-> now unless you're fine with a fixed, unchangeable set of hosted widgets.
-
 A Bartender/Ice-style menubar manager for the [Omarchy](https://omarchy.org)
 bar: collapse other bar widgets into a hover-to-reveal drawer, so your bar
 doesn't stay permanently cluttered with icons you only need occasionally.
 
-![Menubar Manager](preview.png)
+## This is now a full bar replacement, not a widget
+
+Versions before 1.0 installed as an ordinary bar widget (`bar-widget` kind)
+sitting on Omarchy's stock bar. As of Omarchy 4.0.3, that approach lost the
+shell-config write access hosting a widget needs (moving another plugin's
+entry between `bar.layout` and the top-level `plugins[]` array) — Add and
+Remove went permanently dead, with no workaround available from a
+`bar-widget`-kind plugin. There's no narrower capability Omarchy exposes for
+this; the only way back to working Add/Remove was to stop being a widget
+*on* the bar and become the bar itself.
+
+1.0 is a fork of Omarchy's own bar (`omarchy plugin clone omarchy.bar`),
+with the hover-reveal drawer built directly into it. Practically, that
+changes two things:
+
+- **Installing it replaces your bar**, not adds a widget to it. See
+  [Install](#install).
+- Hosting is implemented differently under the hood — a hosted widget's
+  `bar.layout` entry never moves, it just carries an inline `drawer: true`
+  setting, so there's no more relocation dance and no more "where did this
+  widget's settings go" uninstall caveat the old version had.
+
+The tradeoff is honest: this plugin now tracks Omarchy's own bar engine and
+needs to be kept in sync with it by hand, rather than riding on top of
+whatever the stock bar becomes. That's the cost of the only capability that
+actually restores Add/Remove.
 
 ## Why
 
 The built-in system tray already has this hover-to-reveal drawer behavior,
-but it's hardcoded to system-tray (SNI) icons only — there's no way to
-collapse an ordinary bar widget, first-party or third-party, the same way.
-This plugin is a generic version of that mechanism: it can host *any*
-registered bar widget, not just tray icons.
+but it's hardcoded to system-tray (SNI) icons only — there's no built-in way
+to collapse an ordinary bar widget, first-party or third-party, the same
+way. This plugin generalizes that mechanism to *any* registered bar widget.
 
 ## Features
 
 - Works on horizontal (top/bottom) and vertical (left/right) bars alike
 - Hover the ⋯ icon to reveal hosted widgets; move away and it collapses
   again
-- The ⋯ icon keeps itself immediately next to the system tray, wherever
-  that ends up on your bar
+- The ⋯ icon sits immediately after the system tray in the drawer's section
+  (right, by default)
 - A manage popup (click the ⋯ icon) to add, remove, hide, or reorder widgets
-- **Add** moves a widget into the drawer
+- **Add** hosts a widget in the drawer
 - **▲/▼** reorders a hosted widget within the drawer
 - **Hide** keeps a widget hosted (its background service, if it has one,
   keeps running) without showing it anywhere
-- Hosted widgets work exactly as normal: click to open their own panel,
-  their own settings keep persisting, theming and tooltips are unaffected
+- Hosted widgets are rendered with the bar's own real widget machinery, not
+  a hand-rolled stand-in: click to open their own panel, their own settings
+  keep persisting, theming, tooltips, drag-reordering, and the open-panel
+  indicator all work exactly as if they were sitting directly on the bar
 - The drawer stays open for as long as a hosted widget's panel is open, so
-  you can click it again to close it without hunting for it
+  you can close it without hunting for the panel first
+
+Everything else about the bar — every first-party widget, drag-to-reorder,
+transparency toggle, bar position, custom `command`/`qml` modules — is
+unchanged, because this is still that same bar underneath.
 
 ## Install
 
@@ -47,30 +67,16 @@ registered bar widget, not just tray icons.
 omarchy plugin add https://github.com/kevclarkco/omarchy-menubar-manager --enable --yes
 ```
 
-The widget appears on the right side of the bar by default.
-
-Version 0.2.1 restores compatibility with Omarchy 4.0.3's scoped plugin
-APIs. The manager now obtains the widget catalog through Omarchy's supported
-read-only service injection, so the hover drawer can render its hosted
-widgets without accessing the shell's internal bar object.
+`--enable` makes it your active bar immediately (that's what enabling a
+`bar`-kind plugin means — no separate `omarchy bar use` step needed). Your
+existing `bar.layout` in `shell.json` is unaffected; every widget you
+already have placed keeps rendering exactly where it is.
 
 To update later:
 
 ```bash
 omarchy plugin update kc.omarchy-menubar-manager --yes
 ```
-
-## Uninstall
-
-```bash
-omarchy plugin remove kc.omarchy-menubar-manager --yes
-```
-
-Uninstalling does **not** remove hosted widgets from the drawer first — any
-widgets still hosted at uninstall time will need to be added back to the bar
-by hand (`omarchy bar put <widget-id> --section <left|center|right>`), since
-their shell.json entries live in the top-level `plugins[]` array while
-hosted, rather than in `bar.layout.*`.
 
 ## Use
 
@@ -81,45 +87,56 @@ hosted, rather than in `bar.layout.*`.
    to open its own panel, same as if it were still sitting directly on the
    bar.
 4. Back in the manage popup: **▲/▼** to reorder within the drawer, **Hide**
-   to keep it hosted but never shown, **Remove** to put it back on the bar
-   normally.
+   to keep it hosted but never shown, **Remove** to put it back in the
+   normal strip.
 
 ## Limitations
 
-- **Add/Remove don't work on Omarchy 4.0.3+.** Adding or removing a hosted
-  widget requires moving *another* plugin's entry between `bar.layout.*`
-  and the top-level `plugins[]` — a shell-config write Omarchy 4.0.3
-  restricts to `bar`-kind (full-bar-replacement) plugins. This plugin is a
-  `bar-widget`, so `mutateShellConfig` refuses the write and Add/Remove
-  silently do nothing. There's no plugin-side fix: it would need Omarchy to
-  add a scoped capability for this pattern, or the plugin to become a full
-  bar replacement (a much bigger change than "let me host a few widgets").
-  Work around it by editing `~/.config/omarchy/shell.json` directly: move
-  the widget's entry between its `bar.layout.<section>` array and the
-  top-level `plugins[]` array, and add/remove its id from this plugin's own
-  `hosted`/`hidden` lists in its `bar.layout` entry.
+- **Hosting is limited to one section** (`right`, by default) — a widget
+  has to live in that section to be hosted. This keeps reordering within
+  the drawer a plain same-array operation instead of inventing a
+  cross-section ordering scheme.
 - **Hotkey/CLI summon doesn't reach hosted widgets.** `omarchy toggle <id>`
   or a Hyprland keybind bound to a widget won't find it while it's hosted —
   clicking it inside the drawer still opens its panel fine, only *external*
   summon is affected.
+- `omarchy.tray` can't be hosted: a hosted widget is only instantiated
+  while the drawer is actually open (destroyed on every collapse, so a
+  hidden widget's click targets can't be hit by a click elsewhere on the
+  bar) — tray would lose its live SystemTray subscriptions and any open
+  submenu on every single hover-out.
+
+## Uninstall
+
+Switch back to the stock bar first, then remove the plugin:
+
+```bash
+omarchy bar reset
+omarchy plugin remove kc.omarchy-menubar-manager --yes
+```
+
+Removing it while it's still your active bar risks leaving `shell.json`
+pointing at a plugin that no longer exists.
 
 ## How it works
 
-Bar widgets only render where `shell.json`'s `bar.layout.<section>` says
-they are. Hosting a widget moves its entry into the top-level `plugins[]`
-array instead, which keeps it enabled (so its component and its own
-settings-persistence keep working) without the bar auto-placing it anywhere
-— this widget then loads and shows it itself, inside the drawer.
+`Bar.qml`/`BarModel.js` are Omarchy's own bar engine, forked via
+`omarchy plugin clone omarchy.bar`. `DrawerWidget.qml` and `ModuleSlot.qml`
+are the manager's own additions:
 
-## Development
-
-`MenubarModel.js` is pure, dependency-free JS (no QML/Quickshell imports),
-so its host/un-host/reorder/tray-pinning logic has a test suite that runs
-outside the shell entirely:
-
-```bash
-node --test
-```
+- Any `bar.layout.<section>` entry can carry an inline `drawer: true` (and
+  `drawerHidden: true`) setting — the same shape as any other widget's
+  inline settings, e.g. a clock's `format`. Entries carrying it are
+  filtered out of the section's normal strip and rendered inside
+  `DrawerWidget` instead, using the bar's own `ModuleSlot` component for
+  every hosted widget, not a re-implementation of it.
+- The ⋯ glyph itself is a render-time-only sentinel spliced into the
+  section's rendered entries (never written to `shell.json`), positioned
+  right after the tray.
+- Hosting/un-hosting/hiding/reordering all persist through the same
+  `mutateShellConfig` write path the bar already uses for drag-reordering —
+  available here because this plugin *is* the bar (`kinds: ["bar"]`), which
+  is the one thing a `bar-widget`-kind plugin can never get.
 
 ## License
 

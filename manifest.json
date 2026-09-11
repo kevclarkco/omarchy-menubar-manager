@@ -2,23 +2,17 @@
   "schemaVersion": 1,
   "id": "kc.omarchy-menubar-manager",
   "name": "Omarchy Menubar Manager",
-  "version": "0.2.1",
+  "version": "1.0.0",
   "author": "Kevin Clark",
   "license": "MIT",
-  "description": "Collapse bar widgets into a hover-to-reveal drawer, with a manage popup to move widgets in and out.",
+  "description": "A full bar replacement with a built-in hover-to-reveal drawer, so widgets can be hidden behind it without leaving Add/Remove broken.",
   "kinds": [
-    "bar-widget",
-    "service"
+    "bar"
   ],
   "entryPoints": {
-    "barWidget": "MenubarManager.qml",
-    "service": "Service.qml"
+    "bar": "Bar.qml"
   },
-  "barWidget": {
-    "displayName": "Omarchy Menubar Manager",
-    "description": "Hides other bar widgets behind a hover-reveal drawer.",
-    "category": "Layout",
-    "allowMultiple": false,
-    "defaultSection": "right"
+  "omarchy": {
+    "clonedFrom": "omarchy.bar"
   }
 }
