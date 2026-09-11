@@ -49,10 +49,19 @@ Item {
 
   readonly property bool wantOpen: expanded || anyHostedPanelOpen()
   property bool drawerShown: false
+  // Keep the hosted items painted while the clip animates closed. Tying the
+  // Loaders directly to drawerShown destroyed their contents on the first
+  // closing frame, leaving the width/height Behavior animate empty space —
+  // most visible when this widget has no preceding sibling to disguise the
+  // instantaneous disappearance. Each layout unloads the content once its
+  // animated clip actually reaches zero, preserving the collapsed-state
+  // click-target cleanup the Repeater comment below describes.
+  property bool drawerContentLoaded: false
 
   onWantOpenChanged: {
     if (wantOpen) {
       drawerCloseTimer.stop()
+      drawer.drawerContentLoaded = true
       drawer.drawerShown = true
     } else {
       drawerCloseTimer.restart()
@@ -118,6 +127,11 @@ Item {
         height: bar.barSize
         clip: true
 
+        onWidthChanged: {
+          if (!drawer.drawerShown && width <= 0.5)
+            drawer.drawerContentLoaded = false
+        }
+
         Behavior on width {
           NumberAnimation { duration: drawer.animationDuration; easing.type: Easing.OutCubic }
         }
@@ -139,7 +153,7 @@ Item {
             delegate: Loader {
               id: hostedLoader
               required property var modelData
-              active: drawer.drawerShown
+              active: drawer.drawerContentLoaded
               sourceComponent: active ? hostedSlotComponent : null
               Component {
                 id: hostedSlotComponent
@@ -193,6 +207,11 @@ Item {
         height: drawer.drawerShown ? drawerContentV.implicitHeight : 0
         clip: true
 
+        onHeightChanged: {
+          if (!drawer.drawerShown && height <= 0.5)
+            drawer.drawerContentLoaded = false
+        }
+
         Behavior on height {
           NumberAnimation { duration: drawer.animationDuration; easing.type: Easing.OutCubic }
         }
@@ -208,7 +227,7 @@ Item {
             delegate: Loader {
               id: hostedLoaderV
               required property var modelData
-              active: drawer.drawerShown
+              active: drawer.drawerContentLoaded
               sourceComponent: active ? hostedSlotComponentV : null
               Component {
                 id: hostedSlotComponentV
