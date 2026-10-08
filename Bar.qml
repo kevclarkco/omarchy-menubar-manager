@@ -648,24 +648,14 @@ Item {
     return (section === "left" || section === "right") ? section : "right"
   }
 
-  function setDrawerSection(section) {
-    var next = (section === "left" || section === "right") ? section : "right"
-    if (next === root.drawerSection) return
-    if (!root.shell || typeof root.shell.mutateShellConfig !== "function") return
-    root.shell.mutateShellConfig(function(config) {
-      if (!Util.isPlainObject(config.bar)) config.bar = {}
-      if (!Util.isPlainObject(config.bar.drawer)) config.bar.drawer = {}
-      config.bar.drawer.section = next
-    })
-  }
-
   // A section's entries with anything drawer-hosted filtered out, for the
-  // normal strip's Repeater. Every section is filtered (not just
-  // drawerSection) so a widget that was hosted from the drawer's own section
-  // stays out of the strip even if drawerSection is later reconfigured to
-  // point elsewhere while entries are still flagged.
+  // normal strip's Repeater. Only drawerSection is filtered: the drawer and
+  // its manage popup read drawerSection alone, so an entry still flagged in
+  // another section (left behind when bar.drawer.section is changed) must
+  // render in its strip as normal rather than vanish from both places.
   function stripEntries(region) {
     var entries = root.layoutEntries(region)
+    if (region !== root.drawerSection) return entries
     var out = []
     for (var i = 0; i < entries.length; i++) {
       if (!BarModel.isDrawerEntry(entries[i])) out.push(entries[i])
