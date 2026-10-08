@@ -27,9 +27,14 @@ Item {
 
   property bool expanded: false
   property bool managePopupOpen: false
+  readonly property var hostedEntries: bar.drawerEntries()
   readonly property var hostedIds: bar.drawerHostedIds()
   readonly property var visibleEntries: bar.drawerVisibleEntries()
   readonly property var visibleIds: visibleEntries.map(function(e) { return bar.entryId(e) })
+
+  function isEntryVisible(entry) {
+    return visibleIds.indexOf(bar.entryId(entry)) !== -1
+  }
   readonly property int animationDuration: 600
   readonly property int itemGap: Style.space(4)
 
@@ -49,13 +54,13 @@ Item {
 
   readonly property bool wantOpen: expanded || anyHostedPanelOpen()
   property bool drawerShown: false
-  // Keep the hosted items painted while the clip animates closed. Tying the
-  // Loaders directly to drawerShown destroyed their contents on the first
-  // closing frame, leaving the width/height Behavior animate empty space —
-  // most visible when this widget has no preceding sibling to disguise the
-  // instantaneous disappearance. Each layout unloads the content once its
-  // animated clip actually reaches zero, preserving the collapsed-state
-  // click-target cleanup the Repeater comment below describes.
+  // Keep the hosted items painted while the clip animates closed. Tying their
+  // visibility directly to drawerShown hid them on the first closing frame,
+  // leaving the width/height Behavior animate empty space — most visible
+  // when this widget has no preceding sibling to disguise the instantaneous
+  // disappearance. Each layout hides the content once its animated clip
+  // actually reaches zero, preserving the collapsed-state click-target
+  // cleanup the Repeater comment below describes.
   property bool drawerContentLoaded: false
 
   onWantOpenChanged: {
@@ -142,23 +147,22 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           spacing: drawer.itemGap
 
-          // Hosted widgets are only instantiated while the reveal row is
-          // actually open, destroyed (not just hidden) on every collapse
-          // — clipping is paint-only, so a merely-invisible-but-still-
-          // live widget's own click targets would keep registering at
-          // their real geometry and could be hit by a click on an
-          // unrelated, later bar widget.
+          // Every hosted widget stays instantiated, hidden ones included,
+          // so widgets that do background work in their own item (an
+          // IpcHandler, a polling Timer — e.g. omarchy.system-update)
+          // keep running while the drawer is collapsed. Clipping is
+          // paint-only, so a collapsed slot is made invisible as well:
+          // invisible items take no pointer input, which keeps their
+          // click targets from being hit by a click on an unrelated,
+          // later bar widget.
           Repeater {
-            model: drawer.visibleEntries
-            delegate: Loader {
-              id: hostedLoader
+            model: drawer.hostedEntries
+            delegate: ModuleSlot {
               required property var modelData
-              active: drawer.drawerContentLoaded
-              sourceComponent: active ? hostedSlotComponent : null
-              Component {
-                id: hostedSlotComponent
-                ModuleSlot { bar: drawer.bar; entry: hostedLoader.modelData; region: drawer.bar.drawerSection }
-              }
+              bar: drawer.bar
+              entry: modelData
+              region: drawer.bar.drawerSection
+              visible: drawer.drawerContentLoaded && drawer.isEntryVisible(modelData)
             }
           }
         }
@@ -223,16 +227,13 @@ Item {
           spacing: drawer.itemGap
 
           Repeater {
-            model: drawer.visibleEntries
-            delegate: Loader {
-              id: hostedLoaderV
+            model: drawer.hostedEntries
+            delegate: ModuleSlot {
               required property var modelData
-              active: drawer.drawerContentLoaded
-              sourceComponent: active ? hostedSlotComponentV : null
-              Component {
-                id: hostedSlotComponentV
-                ModuleSlot { bar: drawer.bar; entry: hostedLoaderV.modelData; region: drawer.bar.drawerSection }
-              }
+              bar: drawer.bar
+              entry: modelData
+              region: drawer.bar.drawerSection
+              visible: drawer.drawerContentLoaded && drawer.isEntryVisible(modelData)
             }
           }
         }

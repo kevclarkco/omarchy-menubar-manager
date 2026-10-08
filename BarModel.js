@@ -95,11 +95,12 @@ function inlineSettingsDelta(current, next) {
       if (JSON.stringify(a[j]) === JSON.stringify(b[j])) continue
       if (customModuleType(a[j]) || customModuleType(b[j])) return null
       if (counts[entryId(b[j])] > 1) return null
-      // A widget moving into or out of the drawer (or the drawer's reveal
-      // row specifically, via drawerHidden) changes which Repeater — this
-      // section's normal strip vs. DrawerWidget's visibleEntries — it
-      // belongs to, not just its own settings. DrawerWidget.hostedIds/
-      // visibleEntries are `readonly property var: bar.drawerXxx()`
+      // A widget moving into or out of the drawer (or being shown/hidden
+      // within it, via drawerHidden) changes which Repeater — this
+      // section's normal strip vs. DrawerWidget's hostedEntries — it
+      // belongs to, or whether it shows there, not just its own settings.
+      // DrawerWidget.hostedEntries/hostedIds/visibleEntries are
+      // `readonly property var: bar.drawerXxx()`
       // bindings that only re-evaluate when the `layoutConfig` *property*
       // itself is reassigned; applySettingsDelta below deliberately mutates
       // layoutConfig[region][index] in place instead (that's its whole
@@ -123,13 +124,9 @@ function isDrawerHiddenEntry(entry) {
   return entrySettings(entry).drawerHidden === true
 }
 
-// omarchy.tray is excluded from drawer hosting: DrawerWidget only
-// instantiates hosted widgets' ModuleSlots while the reveal row is actually
-// open (destroying them on every collapse, to avoid a stale hidden widget's
-// click targets bleeding into hit-testing elsewhere on the bar — the same
-// reasoning Bar.qml's own openPanelIndicator gating documents). Tray keeps
-// live SystemTray subscriptions and open submenu state that repeatedly
-// destroying/recreating on every hover-out would disrupt. Not worth it.
+// omarchy.tray is excluded from drawer hosting: it already has its own
+// built-in hover drawer for tray icons, and the drawer glyph is positioned
+// relative to it (see Bar.qml's sectionEntriesForRender).
 var EXCLUDED_DRAWER_IDS = ["omarchy.tray"]
 
 // "Add a widget to the drawer" candidate list for the manage popup: every
