@@ -44,10 +44,13 @@ Item {
   // an open popup.
   function anyHostedPanelOpen() {
     if (!bar.activePopout) return false
+    var window = bar.targetWindow(drawer)
+    if (!window) return false
     for (var i = 0; i < bar.moduleSlots.length; i++) {
       var slot = bar.moduleSlots[i]
       if (slot && slot.activeItem === bar.activePopout
-          && hostedIds.indexOf(slot.moduleName) !== -1) return true
+          && hostedIds.indexOf(slot.moduleName) !== -1
+          && bar.slotWindow(slot) === window) return true
     }
     return false
   }

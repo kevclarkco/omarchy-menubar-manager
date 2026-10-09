@@ -608,6 +608,8 @@ Item {
       for (var s = 0; s < moduleSlots.length; s++) {
         var slot = moduleSlots[s]
         if (!slot || slot.region !== change.region || slot.moduleName !== entryId(change.entry)) continue
+        // Keep later widget loads consistent with the live settings update.
+        slot.entry = change.entry
         var item = slot.activeItem
         if (item && "settings" in item) item.settings = settings
       }
@@ -725,7 +727,7 @@ Item {
             break
           }
         }
-        entry = moved || { id: widgetId }
+        entry = Util.isPlainObject(moved) ? moved : { id: widgetId }
         section.push(entry)
       } else {
         entry = section[idx]
